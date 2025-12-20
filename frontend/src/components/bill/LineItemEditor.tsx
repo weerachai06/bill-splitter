@@ -93,7 +93,7 @@ export function LineItemEditor({
       <div className="border border-blue-300 rounded-lg p-4 bg-blue-50">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-800 mb-1">
               Item Name
             </label>
             <input
@@ -113,7 +113,7 @@ export function LineItemEditor({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-800 mb-1">
               Quantity
             </label>
             <input
@@ -125,7 +125,7 @@ export function LineItemEditor({
               min="0.01"
               step="0.01"
               className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors.quantity ? "border-red-300 bg-red-50" : "border-gray-300"
+                errors.quantity ? "border-red-300 bg-red-50" : "border-gray-800"
               }`}
             />
             {errors.quantity && (
@@ -134,7 +134,7 @@ export function LineItemEditor({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-800 mb-1">
               Unit Price ($)
             </label>
             <input
@@ -157,11 +157,11 @@ export function LineItemEditor({
 
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-800">
               Total:{" "}
               <span className="font-semibold">${editedItem.totalPrice}</span>
             </p>
-            <label className="flex items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2 text-sm text-gray-800">
               <input
                 type="checkbox"
                 checked={editedItem.isShared}
@@ -191,8 +191,9 @@ export function LineItemEditor({
         </div>
 
         {editedItem.extractedText && (
-          <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
-            <strong>Original OCR:</strong> {editedItem.extractedText}
+          <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-800 border border-gray-200">
+            <strong className="text-gray-900">Original OCR:</strong>{" "}
+            {editedItem.extractedText}
           </div>
         )}
       </div>
@@ -217,7 +218,7 @@ export function LineItemEditor({
             )}
           </div>
 
-          <div className="mt-1 flex items-center gap-4 text-sm text-gray-600">
+          <div className="mt-1 flex items-center gap-4 text-sm text-gray-700">
             <span>Qty: {lineItem.quantity}</span>
             <span>@ ${lineItem.unitPrice}</span>
             <span className="font-semibold">Total: ${lineItem.totalPrice}</span>

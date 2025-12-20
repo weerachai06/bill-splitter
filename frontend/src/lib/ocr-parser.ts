@@ -4,6 +4,26 @@
 import type { LineItem, CreateLineItemData } from '@bill-splitter/shared';
 import { toDecimalString } from './calculations';
 
+// OCR word data interface
+interface OCRWord {
+  text: string;
+  bbox: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  };
+  confidence: number;
+}
+
+// Position filtering options
+interface PositionFilterOptions {
+  priceColumnX?: number; // Right edge position for price column
+  tolerance?: number;    // Position tolerance
+  strictPriceValidation?: boolean; // Enable strict price format validation
+  validPriceWords?: OCRWord[]; // Pre-validated price words from caller
+}
+
 // Helper function to convert Thai numbers to Arabic numbers
 function convertThaiNumbers(text: string): string {
   const thaiToArabic: { [key: string]: string } = {
@@ -131,9 +151,13 @@ interface ParsedReceipt {
 }
 
 /**
- * Parse OCR text into structured receipt data
+ * Parse OCR text into structured receipt data with position filtering
  */
-export function parseReceiptText(ocrText: string): ParsedReceipt {
+export function parseReceiptText(
+  ocrText: string, 
+  ocrWords?: OCRWord[], 
+  positionFilter?: PositionFilterOptions
+): ParsedReceipt {
   console.log('OCR Debug: Starting text parsing for:', ocrText);
 
   // Handle very short or empty text
@@ -151,6 +175,55 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
   }
 
   console.log({ocrText})
+  
+  // Filter words based on position if position data is available
+  let filteredPriceWords: OCRWord[] = [];
+  
+  if (ocrWords && positionFilter) {
+    // Use pre-validated price words if provided, otherwise filter ourselves
+    if (positionFilter.validPriceWords && positionFilter.validPriceWords.length > 0) {
+      filteredPriceWords = positionFilter.validPriceWords;
+      console.log('OCR Debug: Using pre-validated price words:', filteredPriceWords.length);
+    } else if (positionFilter.priceColumnX) {
+      // Fallback: do our own filtering
+      const tolerance = positionFilter.tolerance || 50;
+      const priceColumnX = positionFilter.priceColumnX;
+      const strictValidation = positionFilter.strictPriceValidation || false;
+      
+      filteredPriceWords = ocrWords.filter(word => {
+        // Use strict or loose price validation
+        let isValidPrice = false;
+        if (strictValidation) {
+          // อนุญาตรูปแบบทศนิยม (XX.XX) หรือจำนวนเต็มที่สมเหตุสมผล
+          const wholeNumberPattern = /^(?!0\d)([1-9]\d*(\.\d{1,2})?|0(\.\d{1,2})?)$/;
+          
+          isValidPrice = (wholeNumberPattern.test(word.text) && 
+                         parseInt(word.text) >= 5 && 
+                         parseInt(word.text) <= 9999);
+        } else {
+          // Loose: original pattern
+          const pricePattern = /^(?!0\d)([1-9]\d*(\.\d{1,2})?|0(\.\d{1,2})?)$/;
+          isValidPrice = pricePattern.test(word.text);
+        }
+        
+        const isInPriceArea = Math.abs(word.bbox.x1 - priceColumnX) <= tolerance;
+        
+        // Additional validation: exclude common non-price patterns
+        const isNotDateTime = !/^\d{1,2}[:\\/\-]\d{1,2}|\d{4}$/.test(word.text);
+        const isNotPhoneOrId = word.text.length <= 6; // Phone numbers usually longer
+        const isReasonablePrice = parseFloat(word.text) <= 10000; // Reasonable price range
+        
+        if (isValidPrice && isInPriceArea && isNotDateTime && isNotPhoneOrId && isReasonablePrice) {
+          console.log('OCR Debug: Valid price for validation:', word.text, word.bbox);
+          return true;
+        }
+        
+        return false;
+      });
+      
+      console.log('OCR Debug: Self-filtered price words:', filteredPriceWords.length);
+    }
+  }
 
   const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
@@ -250,11 +323,12 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
     }
 
     // Try to parse as line item using multiple strategies
-    let lineItem = parseLineItem(line);
+    // Pass filtered price words for position-aware pricing validation only
+    let lineItem = parseLineItem(line, filteredPriceWords);
     
     // If standard parsing failed, try aggressive parsing
     if (!lineItem) {
-      lineItem = parseLineItemAggressive(line);
+      lineItem = parseLineItemAggressive(line, filteredPriceWords, ocrWords);
     }
     
     if (lineItem) {
@@ -263,11 +337,48 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
     }
   }
   
-  // If still no items found, try to extract from any line with numbers
+  // If still no items found, try to create items directly from OCR words
+  if (lineItems.length === 0 && filteredPriceWords && filteredPriceWords.length > 0 && ocrWords) {
+    console.log('OCR Debug: No text-based items found, trying word-based reconstruction...');
+    
+    for (const priceWord of filteredPriceWords) {
+      const price = cleanPrice(priceWord.text);
+      if (!price || parseFloat(price) <= 0) continue;
+      
+      // Reconstruct name from words on the same line
+      let nameText = reconstructItemNameFromWords(priceWord, ocrWords);
+      
+      if (!nameText || nameText.length < 2) {
+        nameText = 'Menu Item';
+      }
+      
+      // Skip if name looks like header/footer
+      if (isHeaderFooterLine(nameText)) {
+        console.log('OCR Debug: Word-based item rejected - looks like header/footer:', nameText);
+        continue;
+      }
+      
+      const wordBasedItem: CreateLineItemData = {
+        name: nameText,
+        quantity: 1,
+        unitPrice: price,
+        totalPrice: price,
+        category: null,
+        isShared: false,
+        extractedText: `${nameText} ${priceWord.text}`,
+        manuallyEdited: false
+      };
+      
+      lineItems.push(wordBasedItem);
+      console.log('OCR Debug: Word-based item created:', wordBasedItem);
+    }
+  }
+  
+  // If still no items found, try fallback text parsing
   if (lineItems.length === 0) {
     console.log('OCR Debug: No items found, trying fallback parsing...');
     for (const line of lines) {
-      const fallbackItem = parseLineItemFallback(line);
+      const fallbackItem = parseLineItemFallback(line, filteredPriceWords);
       if (fallbackItem) {
         lineItems.push(fallbackItem);
         console.log('OCR Debug: Fallback found item:', fallbackItem);
@@ -293,9 +404,74 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
 }
 
 /**
- * Parse a single line as a potential line item
+ * Reconstruct item names from OCR words using position information
  */
-function parseLineItem(line: string): CreateLineItemData | null {
+function reconstructItemNameFromWords(
+  priceWord: OCRWord, 
+  ocrWords: OCRWord[], 
+  tolerance: number = 50
+): string | null {
+  // Find words on the same line (similar Y coordinate) but to the left of the price
+  const sameLine = ocrWords.filter(word => {
+    const isOnSameLine = Math.abs(word.bbox.y0 - priceWord.bbox.y0) <= tolerance/2;
+    const isToTheLeft = word.bbox.x1 < priceWord.bbox.x0 - 10; // At least 10px gap
+    const isNotPrice = !/^\d+\.\d{2}$/.test(word.text) && !/^[1-9]\d{0,3}$/.test(word.text);
+    
+    return isOnSameLine && isToTheLeft && isNotPrice;
+  });
+  
+  // Sort by X coordinate (left to right)
+  sameLine.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+  
+  // Reconstruct name from sorted words
+  const nameWords = sameLine.map(w => w.text).join(' ').trim();
+  
+  console.log('OCR Debug: Reconstructed name for price', priceWord.text, ':', nameWords);
+  
+  return nameWords.length > 1 ? nameWords : null;
+}
+
+/**
+ * Check if a line looks like header/footer content
+ */
+function isHeaderFooterLine(line: string): boolean {
+  const lowerLine = line.toLowerCase();
+  
+  // Common header/footer keywords
+  const headerFooterKeywords = [
+    'receipt', 'bill', 'invoice', 'thank', 'welcome', 'visit', 'again',
+    'tel:', 'phone:', 'address:', 'www.', '.com', '@', 'tax id:', 'vat:',
+    'order #:', 'table:', 'server:', 'cashier:', 'date:', 'time:'
+  ];
+  
+  // Check if line contains header/footer keywords
+  if (headerFooterKeywords.some(keyword => lowerLine.includes(keyword))) {
+    return true;
+  }
+  
+  // Check if line is mostly uppercase (often store names)
+  const upperCaseRatio = (line.match(/[A-Z]/g) || []).length / line.length;
+  if (upperCaseRatio > 0.6 && line.length > 5) {
+    return true;
+  }
+  
+  // Check for address patterns
+  if (/\d+\s+[a-zA-Z\s]+(st|ave|rd|blvd|street|road)/i.test(line)) {
+    return true;
+  }
+  
+  // Check for phone patterns
+  if (/\d{3}[\-\s]?\d{3}[\-\s]?\d{4}/.test(line)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Parse a single line as a potential line item with position filtering
+ */
+function parseLineItem(line: string, filteredPriceWords?: OCRWord[]): CreateLineItemData | null {
   // Skip obviously non-item lines
   if (isHeaderLine(line) || isFooterLine(line)) {
     return null;
@@ -335,6 +511,25 @@ function parseLineItem(line: string): CreateLineItemData | null {
     if (!price || parseFloat(price) <= 0) {
       console.log('OCR Debug: Item rejected - no valid price:', line);
       return null; // Remove items without valid prices
+    }
+
+    // Additional validation: check if price is in filtered words (if position filtering is active)
+    if (filteredPriceWords && filteredPriceWords.length > 0) {
+      const isPriceInFilteredSet = filteredPriceWords.some(word => {
+        const wordPrice = cleanPrice(word.text);
+        return wordPrice === price;
+      });
+      
+      if (!isPriceInFilteredSet) {
+        console.log('OCR Debug: Item rejected - price not in correct position:', line, price);
+        return null; // Skip prices not in the correct column
+      }
+    }
+    
+    // Additional validation: exclude lines that look like headers/footers
+    if (isHeaderFooterLine(nameText)) {
+      console.log('OCR Debug: Item rejected - looks like header/footer:', line);
+      return null;
     }
 
     // Validate the name (should not be too short or contain only numbers)
@@ -414,9 +609,9 @@ function extractQuantityAndPrice(text: string): {
 }
 
 /**
- * Aggressive line item parsing for difficult OCR text
+ * Aggressive line item parsing for difficult OCR text with position filtering
  */
-function parseLineItemAggressive(line: string): CreateLineItemData | null {
+function parseLineItemAggressive(line: string, filteredPriceWords?: OCRWord[], allWords?: OCRWord[]): CreateLineItemData | null {
   // Look for any line that contains both text and numbers
   const priceMatches = line.match(PATTERNS.price);
   
@@ -434,15 +629,57 @@ function parseLineItemAggressive(line: string): CreateLineItemData | null {
     return null; // Remove items without valid prices
   }
   
+  // Additional validation: check if price is in filtered words (if position filtering is active)
+  if (filteredPriceWords && filteredPriceWords.length > 0) {
+    const isPriceInFilteredSet = filteredPriceWords.some(word => {
+      const wordPrice = cleanPrice(word.text);
+      return wordPrice === price;
+    });
+    
+    if (!isPriceInFilteredSet) {
+      console.log('OCR Debug: Aggressive parsing - price not in correct position:', line, price);
+      return null; // Skip prices not in the correct column
+    }
+  }
+  
   // Extract name as everything before the price
   const priceIndex = line.lastIndexOf(priceStr);
   let nameText = line.substring(0, priceIndex).trim();
   
+  // Try to reconstruct name using OCR word positions if available
+  if (filteredPriceWords && allWords && nameText.length < 3) {
+    const priceWord = filteredPriceWords.find(w => cleanPrice(w.text) === price);
+    if (priceWord) {
+      const reconstructedName = reconstructItemNameFromWords(priceWord, allWords);
+      if (reconstructedName && reconstructedName.length > 2) {
+        nameText = reconstructedName;
+        console.log('OCR Debug: Used word reconstruction for name:', nameText);
+      }
+    }
+  }
+  
   // Clean up the name
   nameText = nameText.replace(/[.\s]+$/, '').trim();
+  nameText = nameText.replace(/^[.\s\-_]+/, '').trim(); // Remove leading dots/dashes
   
+  // If name is empty or too short, try to get a meaningful name
   if (nameText.length < 2) {
-    nameText = `Item (${line.substring(0, 20)}...)`;
+    // Look for Thai or English text in the line
+    const textMatches = line.match(/[ก-๙a-zA-Z][ก-๙a-zA-Z\s]+/g);
+    if (textMatches && textMatches.length > 0) {
+      nameText = textMatches[0].trim();
+      console.log('OCR Debug: Extracted name from text match:', nameText);
+    } else {
+      // Last resort: use meaningful default
+      nameText = 'Menu Item';
+      console.log('OCR Debug: Using default name for line:', line);
+    }
+  }
+  
+  // Additional validation: skip if name looks like header/footer
+  if (isHeaderFooterLine(nameText)) {
+    console.log('OCR Debug: Aggressive parsing - name looks like header/footer:', nameText);
+    return null;
   }
   
   // Extract quantity and clean name
@@ -463,7 +700,7 @@ function parseLineItemAggressive(line: string): CreateLineItemData | null {
 /**
  * Fallback parsing for any line with recognizable patterns
  */
-function parseLineItemFallback(line: string): CreateLineItemData | null {
+function parseLineItemFallback(line: string, filteredPriceWords?: OCRWord[]): CreateLineItemData | null {
   // Skip lines that are clearly not items
   if (line.length < 4 || 
       line.match(/^[\d\s.,-]+$/) || // Only numbers and punctuation
@@ -509,12 +746,38 @@ function parseLineItemFallback(line: string): CreateLineItemData | null {
     return null; // Remove items without valid prices
   }
   
-  // Create a item name from remaining text
+  // Additional validation: check if price is in filtered words (if position filtering is active)
+  if (filteredPriceWords && filteredPriceWords.length > 0) {
+    const isPriceInFilteredSet = filteredPriceWords.some(word => {
+      const wordPrice = cleanPrice(word.text);
+      return wordPrice === price;
+    });
+    
+    if (!isPriceInFilteredSet) {
+      console.log('OCR Debug: Fallback parsing - price not in correct position:', line, price);
+      return null; // Skip prices not in the correct column
+    }
+  }
+  
+  // Create item name from remaining text - improved logic
   let nameText = line.replace(/[\d๐-๙.,฿$]+/g, '').trim();
   nameText = nameText.replace(/\s+/g, ' ');
+  nameText = nameText.replace(/^[.\s\-_]+/, '').replace(/[.\s\-_]+$/, '').trim();
   
+  // If no meaningful name, try to extract Thai/English text
   if (nameText.length < 2) {
-    nameText = 'Menu Item';
+    const textMatches = line.match(/[ก-๙a-zA-Z][ก-๙a-zA-Z\s]+/g);
+    if (textMatches && textMatches.length > 0) {
+      nameText = textMatches[0].trim();
+    } else {
+      nameText = 'Menu Item';
+    }
+  }
+  
+  // Skip if name looks like header/footer
+  if (isHeaderFooterLine(nameText)) {
+    console.log('OCR Debug: Fallback parsing - name looks like header/footer:', nameText);
+    return null;
   }
   
   // Extract quantity if present

@@ -31,9 +31,86 @@ export default function Home() {
     console.log("OCR Debug: Processing completed with result:", result);
 
     try {
-      // Parse the OCR text into structured data
-      const parsedData = parseReceiptText(result.text);
-      console.log("OCR Debug: Parsed receipt data:", parsedData);
+      // Step 1: Find valid price words with strict validation
+      const validPriceWords = result.words.filter((word) => {
+        // Alternative: whole number that could be price (> 5 and < 10000)
+        const strictPricePattern =
+          /^(?!0\d)([1-9]\d{0,3}|\d{1,4}\.\d{1,2}|0\.\d{1,2})$/;
+
+        const isStrictPrice = strictPricePattern.test(word.text);
+        const isWholePrice =
+          parseInt(word.text) >= 5 && parseInt(word.text) <= 9999;
+
+        if (isStrictPrice || isWholePrice) {
+          console.log(
+            "OCR Debug: Valid price candidate:",
+            word.text,
+            word.bbox
+          );
+          return true;
+        }
+        return false;
+      });
+
+      console.log(
+        "OCR Debug: Found",
+        validPriceWords.length,
+        "valid price candidates"
+      );
+
+      // Step 2: Find the rightmost position of valid prices (price column)
+      const maxPricePosition = validPriceWords.reduce((acc, word) => {
+        return word.bbox.x1 > acc ? word.bbox.x1 : acc;
+      }, 0);
+
+      // Step 3: Filter words that are both valid prices AND in the price column
+      const priceColumnWords = validPriceWords.filter((word) => {
+        const isInPriceColumn = Math.abs(word.bbox.x1 - maxPricePosition) <= 30; // Strict tolerance
+
+        if (isInPriceColumn) {
+          return true;
+        }
+
+        const priceFormat = /^(?!0\d)([1-9]\d*(\.\d{1,2})?|0(\.\d{1,2})?)$/;
+        return priceFormat.test(word.text);
+      });
+
+      console.log({ priceColumnWords });
+
+      console.log(
+        "OCR Debug: Filtered to",
+        priceColumnWords.length,
+        "prices in correct column"
+      );
+
+      // Step 4: Exclude header/footer content (top 20% and bottom 15% of image)
+      const imageHeight = Math.max(...result.words.map((w) => w.bbox.y1));
+      const headerThreshold = imageHeight * 0.2; // Top 20%
+      const footerThreshold = imageHeight * 0.85; // Bottom 15%
+
+      const contentWords = result.words.filter((word) => {
+        const isInContent =
+          word.bbox.y0 > headerThreshold && word.bbox.y1 < footerThreshold;
+        return isInContent;
+      });
+
+      console.log(
+        "OCR Debug: Filtered out header/footer, keeping",
+        contentWords.length,
+        "content words"
+      );
+
+      // Step 5: Parse with position filtering
+      const parsedData = parseReceiptText(
+        result.text,
+        result.words, // Use ALL words for text reconstruction
+        {
+          priceColumnX: maxPricePosition,
+          tolerance: 30, // Stricter tolerance
+          strictPriceValidation: true, // Enable strict validation
+          validPriceWords: priceColumnWords, // Pass the validated price words
+        }
+      );
 
       // Create receipt object
       const receipt: Receipt = {
