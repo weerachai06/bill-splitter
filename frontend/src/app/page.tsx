@@ -12,6 +12,7 @@ import type {
   OCRErrorEvent,
   Receipt,
 } from "@bill-splitter/shared";
+import Image from "next/image";
 
 export default function Home() {
   const state = useBillState();
@@ -123,7 +124,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 py-8">
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-8">
@@ -214,7 +215,7 @@ export default function Home() {
                     Processing: {currentImage.name}
                   </h3>
                   <div className="bg-gray-100 rounded-lg p-4">
-                    <img
+                    <Image
                       src={URL.createObjectURL(currentImage)}
                       alt="Processing receipt"
                       className="max-w-full h-48 object-contain mx-auto"

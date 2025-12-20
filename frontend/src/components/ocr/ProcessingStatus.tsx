@@ -36,7 +36,7 @@ export function ProcessingStatus({
           </h3>
 
           {/* Status Icon */}
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             {hasError ? (
               <div className="w-6 h-6 text-red-500">
                 <svg
