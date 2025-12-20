@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import React, { useState } from "react";
@@ -12,7 +13,6 @@ import type {
   OCRErrorEvent,
   Receipt,
 } from "@bill-splitter/shared";
-import Image from "next/image";
 
 export default function Home() {
   const state = useBillState();
@@ -215,7 +215,7 @@ export default function Home() {
                     Processing: {currentImage.name}
                   </h3>
                   <div className="bg-gray-100 rounded-lg p-4">
-                    <Image
+                    <img
                       src={URL.createObjectURL(currentImage)}
                       alt="Processing receipt"
                       className="max-w-full h-48 object-contain mx-auto"

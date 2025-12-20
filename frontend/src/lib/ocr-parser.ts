@@ -30,25 +30,75 @@ function cleanAndNormalizePrice(price: string): string {
   return cleaned;
 }
 
-// Regular expressions for parsing receipt text (enhanced for Thai)
+/**
+ * Clean price string and return valid decimal price or null
+ */
+function cleanPrice(priceStr: string): string | null {
+  if (!priceStr) return null;
+  
+  let cleaned = cleanAndNormalizePrice(priceStr);
+  
+  // Remove non-numeric characters except decimal point
+  cleaned = cleaned.replace(/[^\d.]/g, '');
+  
+  // Handle multiple decimal points - keep only the last one for price format
+  const decimalParts = cleaned.split('.');
+  if (decimalParts.length > 2) {
+    cleaned = decimalParts.slice(0, -1).join('') + '.' + decimalParts[decimalParts.length - 1];
+  }
+  
+  // Try to parse as number
+  let num = parseFloat(cleaned);
+  
+  // If parsing failed or no decimal, try different strategies
+  if (isNaN(num) || !cleaned.includes('.')) {
+    // Extract all digits and try to format as price
+    const digits = priceStr.replace(/[^\d]/g, '');
+    if (digits.length === 0) return null;
+    
+    if (digits.length <= 2) {
+      // Small number, treat as cents
+      num = parseInt(digits) / 100;
+    } else if (digits.length === 3) {
+      // Could be x.xx format
+      num = parseInt(digits.substring(0, 1)) + parseInt(digits.substring(1)) / 100;
+    } else {
+      // Assume last two digits are cents
+      const cents = digits.substring(digits.length - 2);
+      const dollars = digits.substring(0, digits.length - 2);
+      num = parseInt(dollars) + parseInt(cents) / 100;
+    }
+  }
+  
+  // Final validation
+  if (isNaN(num) || num < 0) return null;
+  
+  // Format to 2 decimal places
+  return num.toFixed(2);
+}
+
+// Regular expressions for parsing receipt text (enhanced for Thai and flexibility)
 const PATTERNS = {
-  // Enhanced price patterns: $12.34, 12.34, ฿12.34, 12,34, Thai numbers
-  price: /[฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?/g,
+// Enhanced price patterns: more flexible for various receipt formats
+  price: /[฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?|[\d๐-๙]+[.,][\d๐-๙]{2}/g,
   
-  // Thai-aware line item patterns
-  lineItem: /^(.+?)\s*[.\s]{2,}\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)\s*$/gm,
+  // More flexible line item patterns - capture item name and any price-like number
+  lineItem: /^(.+?)\s*[.\s]{2,}\s*([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)\s*$/gm,
   
-  // Alternative line item pattern for Thai receipts
-  lineItemAlt: /^(.+?)\s+([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)\s*$/gm,
+  // Alternative: item followed by price at end of line
+  lineItemAlt: /^(.+?)\s+([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)\s*$/gm,
+  
+  // Simple pattern: any text followed by numbers (relaxed)
+  lineItemSimple: /^([a-zA-Zก-๙\s\-.&'()]+)\s+([\d๐-๙]+[.,]?[\d๐-๙]*)\s*$/gm,
   
   // Thai tax patterns (ภาษี, VAT, etc.)
-  tax: /(?:tax|hst|gst|sales tax|vat|ภาษี|ภ\.ม\.)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
+  tax: /(?:tax|hst|gst|sales tax|vat|ภาษี|ภ\.ม\.)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)/i,
   
   // Thai total patterns (รวม, ยอดรวม, total)
-  total: /(?:total|amount due|balance|grand total|รวม|ยอดรวม|ยอดสุทธิ)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
+  total: /(?:total|amount due|balance|grand total|รวม|ยอดรวม|ยอดสุทธิ|ทั้งหมด)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)/i,
   
   // Thai subtotal patterns
-  subtotal: /(?:subtotal|sub total|sub-total|รวมย่อย|ยอดย่อย)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
+  subtotal: /(?:subtotal|sub total|sub-total|รวมย่อย|ยอดย่อย)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)/i,
   
   // Tip patterns (เบี้ยเพิ่ม, service charge, etc.)
   tip: /(?:tip|gratuity|service charge|เบี้ยเพิ่ม|ค่าบริการ)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
@@ -99,6 +149,8 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
     };
   }
 
+  console.log({ocrText})
+
   const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
   // If we have very little text, try to create at least one item
@@ -148,7 +200,7 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
   for (const line of lines) {
     // Extract subtotal
     const subtotalMatch = line.match(PATTERNS.subtotal);
-    if (subtotalMatch && !subtotal) {
+    if (subtotalMatch && subtotalMatch[1] && !subtotal) {
       subtotal = cleanPrice(subtotalMatch[1]);
       console.log('OCR Debug: Found subtotal:', subtotal);
       continue;
@@ -156,7 +208,7 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
 
     // Extract tax
     const taxMatch = line.match(PATTERNS.tax);
-    if (taxMatch && !taxAmount) {
+    if (taxMatch && taxMatch[1] && !taxAmount) {
       taxAmount = cleanPrice(taxMatch[1]);
       console.log('OCR Debug: Found tax:', taxAmount);
       continue;
@@ -164,7 +216,7 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
 
     // Extract tip
     const tipMatch = line.match(PATTERNS.tip);
-    if (tipMatch && !tipAmount) {
+    if (tipMatch && tipMatch[1] && !tipAmount) {
       tipAmount = cleanPrice(tipMatch[1]);
       console.log('OCR Debug: Found tip:', tipAmount);
       continue;
@@ -172,7 +224,7 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
 
     // Extract total
     const totalMatch = line.match(PATTERNS.total);
-    if (totalMatch && !totalAmount) {
+    if (totalMatch && totalMatch[1] && !totalAmount) {
       totalAmount = cleanPrice(totalMatch[1]);
       console.log('OCR Debug: Found total:', totalAmount);
       continue;
@@ -254,9 +306,9 @@ function parseLineItem(line: string): CreateLineItemData | null {
     match = line.match(PATTERNS.lineItemAlt);
   }
 
-  if (match) {
+  if (match && match[1] && match[2]) {
     const name = match[1].trim();
-    const priceStr = match[2];
+    const priceStr = match[2].trim();
 
     // Validate the name (should not be too short or contain only numbers)
     if (name.length < 2 || /^\d+$/.test(name)) {
@@ -419,24 +471,6 @@ function parseLineItemFallback(line: string): CreateLineItemData | null {
     extractedText: line,
     manuallyEdited: false
   };
-}
-
-/**
- * Clean and normalize price strings
- */
-function cleanPrice(priceStr: string): string | null {
-  try {
-    // Use the enhanced cleaning function
-    const cleaned = cleanAndNormalizePrice(priceStr);
-    
-    const price = parseFloat(cleaned);
-    if (isNaN(price) || price < 0) {
-      return null;
-    }
-    return toDecimalString(price);
-  } catch {
-    return null;
-  }
 }
 
 /**

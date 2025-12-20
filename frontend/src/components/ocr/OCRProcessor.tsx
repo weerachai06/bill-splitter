@@ -38,27 +38,24 @@ async function preprocessImageForOCR(imageUrl: string): Promise<string> {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      // Convert to grayscale and apply advanced preprocessing
+      // Convert to grayscale with gentler preprocessing for OCR
       for (let i = 0; i < data.length; i += 4) {
-        // Convert to grayscale
+        // Convert to grayscale using luminance formula
         const gray =
           data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
 
-        // Apply gamma correction and contrast enhancement
-        const gamma = 0.8;
-        const contrast = 2.0;
-        const brightness = 30;
+        // Apply gentle contrast enhancement only
+        const contrast = 1.2; // Reduced from 2.0
+        const brightness = 10; // Reduced from 30
 
-        // Gamma correction
-        const gammaCorrect = Math.pow(gray / 255, gamma) * 255;
+        // Simple contrast adjustment without gamma correction
+        let enhanced = (gray - 128) * contrast + 128 + brightness;
 
-        // Contrast and brightness
-        const enhanced = (gammaCorrect - 128) * contrast + 128 + brightness;
+        // Gentle threshold - preserve more detail
+        enhanced = Math.max(0, Math.min(255, enhanced));
 
-        // Adaptive threshold based on local contrast
-        const clampedValue = Math.max(0, Math.min(255, enhanced));
-        const threshold =
-          clampedValue > 160 ? 255 : clampedValue < 80 ? 0 : clampedValue;
+        // Only apply threshold if image is very dark or very bright
+        const threshold = enhanced < 50 ? 0 : enhanced > 200 ? 255 : enhanced;
 
         data[i] = threshold; // red
         data[i + 1] = threshold; // green
@@ -86,14 +83,14 @@ async function preprocessImageForOCR(imageUrl: string): Promise<string> {
 function postProcessThaiText(rawText: string): string {
   let cleaned = rawText;
 
-  // Remove excessive whitespace and normalize line breaks
-  cleaned = cleaned.replace(/\s+/g, " ");
-  cleaned = cleaned.replace(/\n+/g, "\n");
+  // Preserve more whitespace for better line detection
+  cleaned = cleaned.replace(/[ \t]+/g, " "); // Only normalize spaces/tabs
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n"); // Preserve double line breaks
 
-  // Fix common OCR errors for Thai characters
+  // Fix common OCR errors for Thai characters (more conservative)
   const thaiFixMap: { [key: string]: string } = {
     // Common OCR misreads for Thai numbers and symbols
-    oN: "๑", // Thai number 1
+    "0N": "๑", // Thai number 1 (more specific pattern)
     ET: "๒", // Thai number 2
     Er: "๓", // Thai number 3
     Ee: "๔", // Thai number 4
@@ -101,31 +98,46 @@ function postProcessThaiText(rawText: string): string {
     EE: "๖", // Thai number 6
     airs: "฿", // Thai baht symbol
     "&gt;": ">",
-    "=-": "=",
-    // Fix spacing around numbers and prices
+    "&lt;": "<",
+    "&amp;": "&",
   };
 
-  // Apply character fixes
+  // Apply character fixes more carefully
   for (const [wrong, correct] of Object.entries(thaiFixMap)) {
     cleaned = cleaned.replace(new RegExp(wrong, "g"), correct);
   }
 
-  // Try to reconstruct price patterns
-  // Look for number patterns that might be prices
-  cleaned = cleaned.replace(/(\d+)[\s]*[.,][\s]*(\d{2})/g, "$1.$2");
+  // Fix price patterns more conservatively
+  // Match prices with decimal points or commas
+  cleaned = cleaned.replace(/(\d+)\s*[,]\s*(\d{2})\b/g, "$1.$2");
 
-  // Fix Thai baht symbol positioning
-  cleaned = cleaned.replace(/([฿])\s*(\d)/g, "$1$2");
-  cleaned = cleaned.replace(/(\d)\s*([฿])/g, "$1 $2");
+  // Fix Thai baht symbol positioning (more specific)
+  cleaned = cleaned.replace(/฿\s*(\d)/g, "฿$1");
+  cleaned = cleaned.replace(/(\d)\s*฿/g, "$1฿");
 
-  // Clean up line breaks for better item detection
-  cleaned = cleaned
+  // Convert Thai numbers to Arabic for better parsing
+  const thaiToArabic: { [key: string]: string } = {
+    "๐": "0",
+    "๑": "1",
+    "๒": "2",
+    "๓": "3",
+    "๔": "4",
+    "๕": "5",
+    "๖": "6",
+    "๗": "7",
+    "๘": "8",
+    "๙": "9",
+  };
+
+  cleaned = cleaned.replace(/[๐-๙]/g, (match) => thaiToArabic[match] || match);
+
+  // Clean up line breaks but preserve structure
+  const lines = cleaned
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join("\n");
+    .filter((line) => line.length > 1); // Keep lines with at least 2 characters
 
-  return cleaned;
+  return lines.join("\n");
 }
 
 interface OCRProcessorProps {
@@ -213,43 +225,59 @@ export function useOCRProcessor({
           },
         });
 
-        // Try multiple OCR configurations for best results
-        const ocrConfigurations = [
-          {
-            psm: PSM.AUTO,
-            name: "Auto segmentation",
-          },
-          {
-            psm: PSM.SINGLE_BLOCK,
-            name: "Single block",
-          },
-          {
-            psm: PSM.SINGLE_COLUMN,
-            name: "Single column",
-          },
-        ];
+        // Optimized OCR configuration for receipt text
+        console.log("OCR Debug: Configuring OCR for receipt recognition");
+
+        // Set optimal parameters for receipt OCR
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: OEM.LSTM_ONLY,
+          preserve_interword_spaces: "1",
+          user_defined_dpi: "300",
+          // Add character whitelist for receipts (numbers, letters, common symbols)
+          tessedit_char_whitelist:
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,฿$()-:/ ก-๙",
+          // Improve recognition of small text
+          textord_min_linesize: "2.5",
+        });
 
         let bestResult: RecognizeResult | null = null;
-        let highestConfidence = 0;
+        let attempts = 0;
+        const maxAttempts = 2;
 
         try {
-          for (let i = 0; i < ocrConfigurations.length; i++) {
-            const config = ocrConfigurations[i];
+          // Try with original image first
+          console.log("OCR Debug: Attempting OCR with original image");
+
+          try {
+            bestResult = await worker.recognize(
+              imageData, // Use original image first
+              {},
+              {
+                text: true,
+                blocks: true,
+                hocr: false,
+                tsv: false,
+              }
+            );
+            attempts++;
 
             console.log(
-              `OCR Debug: Trying ${config.name} OCR configuration...`
+              `OCR Debug: Original image - Confidence: ${bestResult.data.confidence}%`
+            );
+            console.log(
+              `OCR Debug: Original image - Text length: ${
+                bestResult.data.text.trim().length
+              }`
             );
 
-            try {
-              // Set OCR parameters for this configuration
-              await worker.setParameters({
-                tessedit_pageseg_mode: config.psm,
-                tessedit_ocr_engine_mode: OEM.LSTM_ONLY,
-                preserve_interword_spaces: "1",
-                user_defined_dpi: "300",
-              });
+            // If confidence is very low, try with preprocessed image
+            if (bestResult.data.confidence < 60) {
+              console.log(
+                "OCR Debug: Low confidence, trying with preprocessed image"
+              );
 
-              const result = await worker.recognize(
+              const preprocessedResult = await worker.recognize(
                 preprocessedImageData,
                 {},
                 {
@@ -259,43 +287,52 @@ export function useOCRProcessor({
                   tsv: false,
                 }
               );
+              attempts++;
 
               console.log(
-                `OCR Debug: ${config.name} - Confidence: ${result.data.confidence}%`
-              );
-              console.log(
-                `OCR Debug: ${config.name} - Text length: ${
-                  result.data.text.trim().length
-                }`
+                `OCR Debug: Preprocessed image - Confidence: ${preprocessedResult.data.confidence}%`
               );
 
-              // Accept any result with text, prioritizing by confidence
+              // Use preprocessed result if it's significantly better
               if (
-                result.data.text.trim().length > 0 &&
-                result.data.confidence > highestConfidence
+                preprocessedResult.data.confidence >
+                  bestResult.data.confidence + 10 ||
+                (preprocessedResult.data.text.trim().length >
+                  bestResult.data.text.trim().length &&
+                  preprocessedResult.data.confidence >=
+                    bestResult.data.confidence - 5)
               ) {
-                bestResult = result;
-                highestConfidence = result.data.confidence;
-                console.log(
-                  `OCR Debug: New best result with ${config.name}: ${highestConfidence}%`
-                );
-              } else if (!bestResult && result.data.text.trim().length > 0) {
-                // Take any result if we have none yet
-                bestResult = result;
-                highestConfidence = result.data.confidence;
-                console.log(
-                  `OCR Debug: First valid result with ${config.name}: ${highestConfidence}%`
-                );
-              } else if (!bestResult) {
-                // Store even empty results as potential fallback
-                bestResult = result;
-                highestConfidence = result.data.confidence;
-                console.log(
-                  `OCR Debug: Storing fallback result with ${config.name}: ${highestConfidence}%`
-                );
+                bestResult = preprocessedResult;
+                console.log("OCR Debug: Using preprocessed image result");
               }
-            } catch (error) {
-              console.log(`OCR Debug: ${config.name} failed:`, error);
+            }
+          } catch (error) {
+            console.log("OCR Debug: OCR recognition failed:", error);
+            // Try with a different PSM mode as fallback
+            if (attempts < maxAttempts) {
+              console.log("OCR Debug: Trying AUTO PSM mode as fallback");
+              await worker.setParameters({
+                tessedit_pageseg_mode: PSM.AUTO,
+              });
+
+              try {
+                bestResult = await worker.recognize(
+                  preprocessedImageData,
+                  {},
+                  {
+                    text: true,
+                    blocks: true,
+                    hocr: false,
+                    tsv: false,
+                  }
+                );
+                attempts++;
+                console.log(
+                  `OCR Debug: Fallback AUTO mode - Confidence: ${bestResult.data.confidence}%`
+                );
+              } catch (fallbackError) {
+                console.log("OCR Debug: Fallback also failed:", fallbackError);
+              }
             }
           }
         } finally {
