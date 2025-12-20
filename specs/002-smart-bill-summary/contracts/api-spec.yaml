@@ -1,0 +1,513 @@
+openapi: 3.0.3
+info:
+  title: Smart Bill Summary API Extension
+  description: Extended OCR API endpoints for intelligent receipt processing with field filtering
+  version: 1.0.0
+  contact:
+    name: Bill Splitter Development Team
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+paths:
+  /ocr/smart-extract:
+    post:
+      summary: Enhanced OCR extraction with field classification
+      description: Process receipt image and return structured data with automatic field classification
+      operationId: smartExtractReceipt
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Receipt image file (JPEG, PNG, WebP)
+                languageHint:
+                  type: string
+                  description: Expected language code (en, de, th)
+                  example: "en"
+                includeGeometry:
+                  type: boolean
+                  description: Include bounding box data for layout analysis
+                  default: true
+      responses:
+        '200':
+          description: Successful OCR extraction with classifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmartOCRResult'
+        '400':
+          description: Invalid image format or processing parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Image file too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: OCR processing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /filtering/classify-batch:
+    post:
+      summary: Batch classify OCR lines into categories
+      description: Apply field classification to multiple OCR text lines
+      operationId: classifyFieldsBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lines
+              properties:
+                lines:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TextLine'
+                context:
+                  type: object
+                  description: Additional context for classification
+                  properties:
+                    language:
+                      type: string
+                      example: "en"
+                    merchantType:
+                      type: string
+                      example: "restaurant"
+      responses:
+        '200':
+          description: Successful batch classification
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FieldClassification'
+                  processingTime:
+                    type: number
+                    description: Processing time in milliseconds
+
+  /export/csv:
+    post:
+      summary: Generate CSV from clean summary data
+      description: Convert filtered receipt data to CSV format with custom column mapping
+      operationId: exportToCSV
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - summaries
+                - options
+              properties:
+                summaries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CleanSummary'
+                options:
+                  $ref: '#/components/schemas/CSVExportOptions'
+      responses:
+        '200':
+          description: Successful CSV generation
+          content:
+            text/csv:
+              schema:
+                type: string
+                example: |
+                  Item_Name,Quantity,Unit_Price,Line_Total,Category,Merchant,Date
+                  "Coffee, Large",1,4.50,4.50,Beverage,"Local Cafe","2025-12-20"
+                  "Sandwich, Turkey",1,12.99,12.99,Food,"Local Cafe","2025-12-20"
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csvData:
+                    type: string
+                    description: CSV content as string
+                  filename:
+                    type: string
+                    example: "receipt_export_2025-12-20.csv"
+                  rowCount:
+                    type: integer
+                    description: Number of data rows in CSV
+
+components:
+  schemas:
+    SmartOCRResult:
+      type: object
+      required:
+        - id
+        - fullText
+        - lines
+        - detectedLanguage
+        - confidence
+        - processingTime
+      properties:
+        id:
+          type: string
+          description: Unique processing session ID
+          example: "proc_12345_abc"
+        fullText:
+          type: string
+          description: Complete extracted text
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextLine'
+        detectedLanguage:
+          type: string
+          description: Primary detected language
+          example: "en"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Overall extraction confidence
+        boundingBoxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoundingBox'
+        processingTime:
+          type: number
+          description: Processing duration in milliseconds
+        classifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldClassification'
+          description: Automatic field classifications
+
+    TextLine:
+      type: object
+      required:
+        - text
+        - confidence
+        - lineNumber
+      properties:
+        text:
+          type: string
+          description: Extracted text content
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Extraction confidence for this line
+        boundingBox:
+          $ref: '#/components/schemas/BoundingBox'
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: Sequential line number
+
+    BoundingBox:
+      type: object
+      required:
+        - x
+        - y
+        - width
+        - height
+      properties:
+        x:
+          type: number
+          description: X coordinate of top-left corner
+        y:
+          type: number
+          description: Y coordinate of top-left corner
+        width:
+          type: number
+          description: Width of bounding box
+        height:
+          type: number
+          description: Height of bounding box
+
+    FieldClassification:
+      type: object
+      required:
+        - lineId
+        - category
+        - confidence
+      properties:
+        lineId:
+          type: integer
+          description: Reference to TextLine.lineNumber
+        category:
+          $ref: '#/components/schemas/FieldCategory'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Classification confidence
+        extractedData:
+          $ref: '#/components/schemas/ExtractedField'
+        userOverride:
+          type: boolean
+          description: User manually corrected this classification
+
+    FieldCategory:
+      type: string
+      enum:
+        - item
+        - quantity
+        - price
+        - total
+        - merchant
+        - date
+        - promotional
+        - contact
+        - legal
+        - operational
+        - unknown
+      description: Content classification categories
+
+    ExtractedField:
+      type: object
+      required:
+        - type
+        - value
+        - rawText
+      properties:
+        type:
+          $ref: '#/components/schemas/FieldCategory'
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: string
+              format: date-time
+          description: Parsed value in appropriate type
+        rawText:
+          type: string
+          description: Original text before parsing
+        currency:
+          $ref: '#/components/schemas/CurrencyInfo'
+        unit:
+          type: string
+          description: Unit for quantity fields
+          example: "kg"
+        associatedLines:
+          type: array
+          items:
+            type: integer
+          description: Related line numbers for multi-line items
+
+    CurrencyInfo:
+      type: object
+      required:
+        - code
+        - symbol
+        - amount
+      properties:
+        code:
+          type: string
+          description: ISO 4217 currency code
+          example: "USD"
+        symbol:
+          type: string
+          description: Currency symbol
+          example: "$"
+        amount:
+          type: string
+          description: Decimal amount as string for precision
+          example: "12.99"
+
+    CleanSummary:
+      type: object
+      required:
+        - sourceImageId
+        - profileId
+        - generatedAt
+        - items
+        - totals
+        - metadata
+      properties:
+        sourceImageId:
+          type: string
+          description: Reference to original receipt image
+        profileId:
+          type: string
+          description: Filtering profile used
+        generatedAt:
+          type: string
+          format: date-time
+          description: Summary generation timestamp
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SummaryItem'
+        totals:
+          $ref: '#/components/schemas/SummaryTotals'
+        metadata:
+          $ref: '#/components/schemas/SummaryMetadata'
+
+    SummaryItem:
+      type: object
+      required:
+        - name
+        - quantity
+        - unitPrice
+        - lineTotal
+        - originalLines
+      properties:
+        name:
+          type: string
+          description: Clean item description
+        quantity:
+          type: string
+          description: Quantity as decimal string
+          example: "2.0"
+        unitPrice:
+          type: string
+          description: Price per unit as decimal string
+          example: "4.50"
+        lineTotal:
+          type: string
+          description: Total for this line as decimal string
+          example: "9.00"
+        category:
+          type: string
+          description: Item category if detectable
+        originalLines:
+          type: array
+          items:
+            type: integer
+          description: Source line numbers from OCR
+
+    SummaryTotals:
+      type: object
+      required:
+        - subtotal
+        - tax
+        - total
+        - currency
+      properties:
+        subtotal:
+          type: string
+          description: Sum of line items as decimal string
+        tax:
+          type: string
+          description: Total tax amount as decimal string
+        total:
+          type: string
+          description: Final total as decimal string
+        currency:
+          $ref: '#/components/schemas/CurrencyInfo'
+
+    SummaryMetadata:
+      type: object
+      required:
+        - itemCount
+        - linesProcessed
+        - linesFiltered
+        - processingTime
+        - manualCorrections
+      properties:
+        itemCount:
+          type: integer
+          description: Number of items extracted
+        linesProcessed:
+          type: integer
+          description: Total OCR lines processed
+        linesFiltered:
+          type: integer
+          description: Lines excluded by filtering
+        processingTime:
+          type: integer
+          description: Processing time in milliseconds
+        manualCorrections:
+          type: integer
+          description: User overrides applied
+
+    CSVExportOptions:
+      type: object
+      required:
+        - filename
+        - includeHeaders
+        - dateFormat
+        - currencyFormat
+        - encoding
+        - delimiter
+      properties:
+        filename:
+          type: string
+          example: "receipt_export_2025-12-20.csv"
+        includeHeaders:
+          type: boolean
+          description: Include column headers in CSV
+        dateFormat:
+          type: string
+          example: "YYYY-MM-DD"
+        currencyFormat:
+          type: string
+          example: "0.00"
+        encoding:
+          type: string
+          enum: ["utf-8", "utf-8-bom"]
+        delimiter:
+          type: string
+          enum: [",", ";", "\t"]
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code for client handling
+          example: "OCR_FAILED"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: Error occurrence time
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for OCR service access
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: OCR
+    description: Enhanced OCR processing with smart field classification
+  - name: Filtering
+    description: Content classification and filtering operations
+  - name: Export
+    description: Data export in various formats
