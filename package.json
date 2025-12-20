@@ -31,7 +31,18 @@
     "type": "git",
     "url": "."
   },
-  "keywords": ["bill-splitting", "expense-sharing", "finance", "nextjs", "rust"],
+  "keywords": [
+    "bill-splitting",
+    "expense-sharing",
+    "finance",
+    "nextjs",
+    "rust"
+  ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@types/web": "^0.0.304",
+    "decimal.js": "^10.6.0",
+    "tesseract.js": "^7.0.0"
+  }
 }
