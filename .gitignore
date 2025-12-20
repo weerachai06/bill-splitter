@@ -31,3 +31,17 @@ out/
 # Test coverage
 coverage/
 .nyc_output/
+
+# Rust specific
+Cargo.lock
+*.rs.bk
+*.rlib
+*.prof*
+
+# TypeScript specific  
+*.tsbuildinfo
+.eslintcache
+
+# Temporary files
+*.tmp
+*.swp

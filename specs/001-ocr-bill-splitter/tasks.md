@@ -17,12 +17,12 @@
 
 **Purpose**: Project initialization and foundational structure
 
-- [ ] T001 Initialize shared types package at shared/src/types/ with bill.ts, api.ts, ocr.ts
-- [ ] T002 [P] Configure TypeScript build for shared types package in shared/tsconfig.json
-- [ ] T003 [P] Set up frontend environment configuration for Google Vision API in frontend/.env.example
-- [ ] T004 [P] Install and configure OCR dependencies (Google Cloud Vision API) in frontend/package.json
-- [ ] T005 Create Rust API project structure at api/src/ with handlers/, models/, database/ directories
-- [ ] T006 [P] Configure Cargo.toml with Axum, Diesel, and decimal arithmetic dependencies
+- [X] T001 Initialize shared types package at shared/src/types/ with bill.ts, api.ts, ocr.ts
+- [X] T002 [P] Configure TypeScript build for shared types package in shared/tsconfig.json
+- [X] T003 [P] Set up frontend environment configuration for Google Vision API in frontend/.env.example
+- [X] T004 [P] Install and configure OCR dependencies (Google Cloud Vision API) in frontend/package.json
+- [X] T005 Create Rust API project structure at api/src/ with handlers/, models/, database/ directories
+- [X] T006 [P] Configure Cargo.toml with Axum, Diesel, and decimal arithmetic dependencies
 
 ---
 
@@ -32,12 +32,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 Implement Google Cloud Vision API wrapper in frontend/src/lib/vision-api.ts
-- [ ] T008 [P] Create OCR web worker foundation in frontend/src/workers/ocr.worker.ts
-- [ ] T009 [P] Setup React Context and reducer for bill state management in frontend/src/context/BillContext.tsx
-- [ ] T010 [P] Implement decimal arithmetic utilities for financial calculations in frontend/src/lib/calculations.ts
-- [ ] T011 [P] Create base React components directory structure at frontend/src/components/
-- [ ] T012 Setup Rust API server structure with Axum routes in api/src/main.rs
+- [X] T007 Implement Google Cloud Vision API wrapper in frontend/src/lib/vision-api.ts
+- [X] T008 [P] Create OCR web worker foundation in frontend/src/workers/ocr.worker.ts
+- [X] T009 [P] Setup React Context and reducer for bill state management in frontend/src/context/BillContext.tsx
+- [X] T010 [P] Implement decimal arithmetic utilities for financial calculations in frontend/src/lib/calculations.ts
+- [X] T011 [P] Create base React components directory structure at frontend/src/components/
+- [X] T012 Setup Rust API server structure with Axum routes in api/src/main.rs
 
 **Checkpoint**: OCR foundation and state management ready - user story implementation can begin
 
@@ -51,14 +51,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Create image upload component in frontend/src/components/ocr/ImageUpload.tsx
-- [ ] T014 [P] [US1] Implement OCR processor component in frontend/src/components/ocr/OCRProcessor.tsx
-- [ ] T015 [P] [US1] Create Receipt entity type in shared/src/types/bill.ts
-- [ ] T016 [US1] Integrate Vision API with web worker for image processing in frontend/src/workers/ocr.worker.ts
-- [ ] T017 [US1] Implement OCR progress reporting and error handling in frontend/src/components/ocr/OCRProcessor.tsx
-- [ ] T018 [US1] Create raw text display component in frontend/src/components/ocr/RawTextDisplay.tsx
-- [ ] T019 [US1] Add image preprocessing (resize, format conversion) in frontend/src/lib/vision-api.ts
-- [ ] T020 [US1] Implement OCR status tracking (processing, completed, error) in frontend/src/context/BillContext.tsx
+- [X] T013 [P] [US1] Create image upload component in frontend/src/components/ocr/ImageUpload.tsx
+- [X] T014 [P] [US1] Implement OCR processor component in frontend/src/components/ocr/OCRProcessor.tsx
+- [X] T015 [P] [US1] Create Receipt entity type in shared/src/types/bill.ts
+- [X] T016 [US1] Integrate Vision API with web worker for image processing in frontend/src/workers/ocr.worker.ts
+- [X] T017 [US1] Implement OCR progress reporting and error handling in frontend/src/components/ocr/OCRProcessor.tsx
+- [X] T018 [US1] Create raw text display component in frontend/src/components/ocr/RawTextDisplay.tsx
+- [X] T019 [US1] Add image preprocessing (resize, format conversion) in frontend/src/lib/vision-api.ts
+- [X] T020 [US1] Implement OCR status tracking (processing, completed, error) in frontend/src/context/BillContext.tsx
 
 **Checkpoint**: Receipt image upload and OCR extraction fully functional
 
@@ -72,15 +72,15 @@
 
 ### Implementation for User Story 2
 
-- [ ] T021 [P] [US2] Create LineItem entity type in shared/src/types/bill.ts
-- [ ] T022 [P] [US2] Implement OCR text parser for line items in frontend/src/lib/ocr-parser.ts
-- [ ] T023 [P] [US2] Create editable line item component in frontend/src/components/bill/LineItemEditor.tsx
-- [ ] T024 [US2] Implement line item validation logic in frontend/src/lib/calculations.ts
-- [ ] T025 [US2] Create manual line item addition interface in frontend/src/components/bill/AddLineItem.tsx
-- [ ] T026 [US2] Add line item deletion functionality in frontend/src/components/bill/LineItemEditor.tsx
-- [ ] T027 [US2] Implement automatic subtotal calculation in frontend/src/context/BillContext.tsx
-- [ ] T028 [US2] Create bill summary display component in frontend/src/components/bill/BillSummary.tsx
-- [ ] T029 [US2] Add data persistence to session storage in frontend/src/lib/storage.ts
+- [X] T021 [P] [US2] Create LineItem entity type in shared/src/types/bill.ts
+- [X] T022 [P] [US2] Implement OCR text parser for line items in frontend/src/lib/ocr-parser.ts
+- [X] T023 [P] [US2] Create editable line item component in frontend/src/components/bill/LineItemEditor.tsx
+- [X] T024 [US2] Implement line item validation logic in frontend/src/lib/calculations.ts
+- [X] T025 [US2] Create manual line item addition interface in frontend/src/components/bill/AddLineItem.tsx
+- [X] T026 [US2] Add line item deletion functionality in frontend/src/components/bill/LineItemEditor.tsx
+- [X] T027 [US2] Implement automatic subtotal calculation in frontend/src/context/BillContext.tsx
+- [X] T028 [US2] Create bill summary display component in frontend/src/components/bill/BillSummary.tsx
+- [X] T029 [US2] Add data persistence to session storage in frontend/src/lib/storage.ts
 
 **Checkpoint**: Bill editing and correction interface complete with real-time calculations
 
