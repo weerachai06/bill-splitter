@@ -4,37 +4,69 @@
 import type { LineItem, CreateLineItemData } from '@bill-splitter/shared';
 import { toDecimalString } from './calculations';
 
-// Regular expressions for parsing receipt text
+// Helper function to convert Thai numbers to Arabic numbers
+function convertThaiNumbers(text: string): string {
+  const thaiToArabic: { [key: string]: string } = {
+    '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4',
+    '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9'
+  };
+  
+  return text.replace(/[๐-๙]/g, (match) => thaiToArabic[match] || match);
+}
+
+// Helper function to clean and normalize prices
+function cleanAndNormalizePrice(price: string): string {
+  let cleaned = price;
+  
+  // Convert Thai numbers to Arabic
+  cleaned = convertThaiNumbers(cleaned);
+  
+  // Remove currency symbols and extra spaces
+  cleaned = cleaned.replace(/[฿$บาท\s]/g, '');
+  
+  // Normalize decimal separator
+  cleaned = cleaned.replace(',', '.');
+  
+  return cleaned;
+}
+
+// Regular expressions for parsing receipt text (enhanced for Thai)
 const PATTERNS = {
-  // Common price patterns: $12.34, 12.34, $12,34
-  price: /\$?\d+[.,]\d{2}/g,
+  // Enhanced price patterns: $12.34, 12.34, ฿12.34, 12,34, Thai numbers
+  price: /[฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?/g,
   
-  // Line item patterns (text followed by price)
-  lineItem: /^(.+?)\s*[\s.]{2,}\s*(\$?\d+[.,]\d{2})\s*$/gm,
+  // Thai-aware line item patterns
+  lineItem: /^(.+?)\s*[.\s]{2,}\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)\s*$/gm,
   
-  // Alternative line item pattern (price at end of line)
-  lineItemAlt: /^(.+?)\s+(\$?\d+[.,]\d{2})\s*$/gm,
+  // Alternative line item pattern for Thai receipts
+  lineItemAlt: /^(.+?)\s+([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)\s*$/gm,
   
-  // Tax patterns
-  tax: /(?:tax|hst|gst|sales tax|vat)\s*:?\s*(\$?\d+[.,]\d{2})/i,
+  // Thai tax patterns (ภาษี, VAT, etc.)
+  tax: /(?:tax|hst|gst|sales tax|vat|ภาษี|ภ\.ม\.)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
   
-  // Total patterns
-  total: /(?:total|amount due|balance|grand total)\s*:?\s*(\$?\d+[.,]\d{2})/i,
+  // Thai total patterns (รวม, ยอดรวม, total)
+  total: /(?:total|amount due|balance|grand total|รวม|ยอดรวม|ยอดสุทธิ)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
   
-  // Subtotal patterns
-  subtotal: /(?:subtotal|sub total|sub-total)\s*:?\s*(\$?\d+[.,]\d{2})/i,
+  // Thai subtotal patterns
+  subtotal: /(?:subtotal|sub total|sub-total|รวมย่อย|ยอดย่อย)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
   
-  // Tip patterns
-  tip: /(?:tip|gratuity|service charge)\s*:?\s*(\$?\d+[.,]\d{2})/i,
+  // Tip patterns (เบี้ยเพิ่ม, service charge, etc.)
+  tip: /(?:tip|gratuity|service charge|เบี้ยเพิ่ม|ค่าบริการ)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
   
-  // Quantity patterns: "2x Item" or "Item x2"
-  quantity: /(\d+)\s*[x×]\s*(.+)|(.+)\s*[x×]\s*(\d+)/i,
+  // Quantity patterns with Thai numbers
+  quantity: /([\d๐-๙]+)\s*[x×]\s*(.+)|(.+)\s*[x×]\s*([\d๐-๙]+)/i,
   
-  // Date patterns for receipt validation
-  date: /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/,
+  // Date patterns (including Thai date format)
+  date: /[\d๐-๙]{1,2}[\/\-][\d๐-๙]{1,2}[\/\-][\d๐-๙]{2,4}/,
   
-  // Receipt header patterns (store names, addresses)
-  header: /^[A-Z\s&'.-]+$/
+  // Enhanced header patterns for Thai text
+  header: /^[A-Zก-๙\s&'.-]+$/,
+  
+  // Pattern to identify potential menu items (letters + numbers/prices)
+  menuItem: /^[ก-๙A-Za-z\s\-'&()]+.*[\d๐-๙]/,
+  
+  // Pattern for Thai baht symbol variations  
+  baht: /[฿บาท]/,
 };
 
 interface ParsedReceipt {
@@ -53,7 +85,59 @@ interface ParsedReceipt {
 export function parseReceiptText(ocrText: string): ParsedReceipt {
   console.log('OCR Debug: Starting text parsing for:', ocrText);
 
+  // Handle very short or empty text
+  if (!ocrText || ocrText.trim().length === 0) {
+    console.log('OCR Debug: No text provided for parsing');
+    return {
+      lineItems: [],
+      subtotal: null,
+      taxAmount: null,
+      tipAmount: null,
+      totalAmount: null,
+      confidence: 0,
+      rawText: ocrText
+    };
+  }
+
   const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  
+  // If we have very little text, try to create at least one item
+  if (lines.length === 0 || ocrText.trim().length < 5) {
+    console.log('OCR Debug: Very short text, creating basic item');
+    
+    // Try to find any numbers that could be prices
+    const numbers = ocrText.match(/[\d๐-๙]+[.,]?[\d๐-๙]*/g);
+    let basicItem: CreateLineItemData | null = null;
+    
+    if (numbers && numbers.length > 0) {
+      const potentialPrice = numbers[numbers.length - 1]; // Take last number as price
+      const cleanedPrice = cleanPrice(potentialPrice + (potentialPrice.includes('.') ? '' : '.00'));
+      
+      if (cleanedPrice) {
+        basicItem = {
+          name: 'Receipt Item',
+          quantity: 1,
+          unitPrice: cleanedPrice,
+          totalPrice: cleanedPrice,
+          category: null,
+          isShared: false,
+          extractedText: ocrText.trim(),
+          manuallyEdited: false
+        };
+      }
+    }
+    
+    return {
+      lineItems: basicItem ? [basicItem] : [],
+      subtotal: null,
+      taxAmount: null,
+      tipAmount: null,
+      totalAmount: basicItem ? basicItem.totalPrice : null,
+      confidence: 10, // Low confidence for minimal parsing
+      rawText: ocrText
+    };
+  }
+
   const lineItems: CreateLineItemData[] = [];
   let subtotal: string | null = null;
   let taxAmount: string | null = null;
@@ -95,7 +179,7 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
     }
   }
 
-  // Second pass: Extract line items
+  // Second pass: Extract line items with enhanced detection
   for (const line of lines) {
     // Skip if this line contains summary amounts
     if (
@@ -106,12 +190,35 @@ export function parseReceiptText(ocrText: string): ParsedReceipt {
     ) {
       continue;
     }
+    
+    // Skip very short lines (likely not items)
+    if (line.length < 3) {
+      continue;
+    }
 
-    // Try to parse as line item
-    const lineItem = parseLineItem(line);
+    // Try to parse as line item using multiple strategies
+    let lineItem = parseLineItem(line);
+    
+    // If standard parsing failed, try aggressive parsing
+    if (!lineItem) {
+      lineItem = parseLineItemAggressive(line);
+    }
+    
     if (lineItem) {
       lineItems.push(lineItem);
       console.log('OCR Debug: Found line item:', lineItem);
+    }
+  }
+  
+  // If still no items found, try to extract from any line with numbers
+  if (lineItems.length === 0) {
+    console.log('OCR Debug: No items found, trying fallback parsing...');
+    for (const line of lines) {
+      const fallbackItem = parseLineItemFallback(line);
+      if (fallbackItem) {
+        lineItems.push(fallbackItem);
+        console.log('OCR Debug: Fallback found item:', fallbackItem);
+      }
     }
   }
 
@@ -205,16 +312,123 @@ function extractQuantity(name: string): { name: string; quantity: number } {
 }
 
 /**
+ * Aggressive line item parsing for difficult OCR text
+ */
+function parseLineItemAggressive(line: string): CreateLineItemData | null {
+  // Look for any line that contains both text and numbers
+  const priceMatches = line.match(PATTERNS.price);
+  
+  if (!priceMatches || priceMatches.length === 0) {
+    return null;
+  }
+  
+  // Take the last price match (usually the item price)
+  const priceStr = priceMatches[priceMatches.length - 1];
+  const price = cleanPrice(priceStr);
+  
+  if (!price || parseFloat(price) <= 0) {
+    return null;
+  }
+  
+  // Extract name as everything before the price
+  const priceIndex = line.lastIndexOf(priceStr);
+  let name = line.substring(0, priceIndex).trim();
+  
+  // Clean up the name
+  name = name.replace(/[.\s]+$/, '').trim();
+  
+  if (name.length < 2) {
+    name = `Item (${line.substring(0, 20)}...)`;
+  }
+  
+  const { name: cleanName, quantity } = extractQuantity(name);
+  
+  return {
+    name: cleanName,
+    quantity: quantity,
+    unitPrice: toDecimalString(parseFloat(price) / quantity),
+    totalPrice: price,
+    category: null,
+    isShared: false,
+    extractedText: line,
+    manuallyEdited: false
+  };
+}
+
+/**
+ * Fallback parsing for any line with recognizable patterns
+ */
+function parseLineItemFallback(line: string): CreateLineItemData | null {
+  // Skip lines that are clearly not items
+  if (line.length < 4 || 
+      line.match(/^[\d\s.,-]+$/) || // Only numbers and punctuation
+      line.match(/^[.\s-]+$/) ||    // Only dots and spaces
+      line.match(PATTERNS.date) ||  // Dates
+      line.toLowerCase().includes('receipt') ||
+      line.toLowerCase().includes('thank') ||
+      line.toLowerCase().includes('welcome')) {
+    return null;
+  }
+  
+  // Look for any numbers that might be prices
+  const numbers = line.match(/[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+/g);
+  
+  if (!numbers) {
+    return null;
+  }
+  
+  // Try to find the most price-like number
+  let bestPrice: string | null = null;
+  
+  for (const num of numbers) {
+    const normalized = convertThaiNumbers(num);
+    if (normalized.includes('.') || normalized.includes(',')) {
+      // Decimal number - likely a price
+      bestPrice = num;
+      break;
+    } else if (parseFloat(normalized) > 5) {
+      // Whole number > 5 - could be a price in baht
+      bestPrice = num + '.00';
+    }
+  }
+  
+  if (!bestPrice) {
+    return null;
+  }
+  
+  const price = cleanPrice(bestPrice);
+  if (!price || parseFloat(price) <= 0) {
+    return null;
+  }
+  
+  // Create a generic item name
+  let name = line.replace(/[\d๐-๙.,฿$]+/g, '').trim();
+  name = name.replace(/\s+/g, ' ');
+  
+  if (name.length < 2) {
+    name = 'Menu Item';
+  }
+  
+  return {
+    name: name,
+    quantity: 1,
+    unitPrice: price,
+    totalPrice: price,
+    category: null,
+    isShared: false,
+    extractedText: line,
+    manuallyEdited: false
+  };
+}
+
+/**
  * Clean and normalize price strings
  */
 function cleanPrice(priceStr: string): string | null {
-  // Remove currency symbols and clean up
-  const cleaned = priceStr
-    .replace(/[$,]/g, '')
-    .replace(/,/g, '.') // Handle European decimal format
-    .trim();
-
   try {
+    // Use the enhanced cleaning function
+    const cleaned = cleanAndNormalizePrice(priceStr);
+    
     const price = parseFloat(cleaned);
     if (isNaN(price) || price < 0) {
       return null;
