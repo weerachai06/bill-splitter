@@ -3,30 +3,195 @@
 **Input**: Design documents from `/specs/001-ocr-bill-splitter/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
-**Organization**: Tasks are organized by user story to enable independent implementation and testing of each story.
+**Feature Goal**: Build an OCR-powered bill splitter that allows users to scan receipt images, extract itemized data using Google Cloud Vision API with web workers, manually correct OCR results, and split bills among multiple people with automatic tax/tip distribution.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- Include exact file paths in descriptions
+- File paths use monorepo structure: `frontend/`, `api/`, `shared/`
 
-## Phase 1: Setup (Project Foundation)
+---
 
-**Purpose**: Initialize project structure and shared dependencies
+## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Install Tesseract.js dependencies in frontend/package.json
-- [ ] T002 [P] Configure TypeScript strict mode in frontend/tsconfig.json
-- [ ] T003 [P] Set up Tailwind CSS configuration in frontend/tailwind.config.js
-- [ ] T004 [P] Create shared types directory and setup in shared/types/
-- [ ] T005 [P] Configure web worker support in frontend/next.config.js
-- [ ] T006 [P] Set up Rust Axum project structure in api/src/
-- [ ] T007 [P] Add Decimal.js dependency for frontend calculations
-- [ ] T008 [P] Configure PostgreSQL with Diesel in api/Cargo.toml
+**Purpose**: Project initialization and foundational structure
+
+- [ ] T001 Initialize shared types package at shared/src/types/ with bill.ts, api.ts, ocr.ts
+- [ ] T002 [P] Configure TypeScript build for shared types package in shared/tsconfig.json
+- [ ] T003 [P] Set up frontend environment configuration for Google Vision API in frontend/.env.example
+- [ ] T004 [P] Install and configure OCR dependencies (Google Cloud Vision API) in frontend/package.json
+- [ ] T005 Create Rust API project structure at api/src/ with handlers/, models/, database/ directories
+- [ ] T006 [P] Configure Cargo.toml with Axum, Diesel, and decimal arithmetic dependencies
+
+---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core infrastructure needed by all user stories
+**Purpose**: Core OCR and data processing infrastructure that MUST be complete before user stories
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+
+- [ ] T007 Implement Google Cloud Vision API wrapper in frontend/src/lib/vision-api.ts
+- [ ] T008 [P] Create OCR web worker foundation in frontend/src/workers/ocr.worker.ts
+- [ ] T009 [P] Setup React Context and reducer for bill state management in frontend/src/context/BillContext.tsx
+- [ ] T010 [P] Implement decimal arithmetic utilities for financial calculations in frontend/src/lib/calculations.ts
+- [ ] T011 [P] Create base React components directory structure at frontend/src/components/
+- [ ] T012 Setup Rust API server structure with Axum routes in api/src/main.rs
+
+**Checkpoint**: OCR foundation and state management ready - user story implementation can begin
+
+---
+
+## Phase 3: User Story 1 - Scan and Extract Receipt Data (Priority: P1) 🎯 MVP
+
+**Goal**: Users can upload receipt images and get automatic OCR text extraction with visual progress feedback
+
+**Independent Test**: Upload a receipt image, verify OCR processing completes and displays extracted text
+
+### Implementation for User Story 1
+
+- [ ] T013 [P] [US1] Create image upload component in frontend/src/components/ocr/ImageUpload.tsx
+- [ ] T014 [P] [US1] Implement OCR processor component in frontend/src/components/ocr/OCRProcessor.tsx
+- [ ] T015 [P] [US1] Create Receipt entity type in shared/src/types/bill.ts
+- [ ] T016 [US1] Integrate Vision API with web worker for image processing in frontend/src/workers/ocr.worker.ts
+- [ ] T017 [US1] Implement OCR progress reporting and error handling in frontend/src/components/ocr/OCRProcessor.tsx
+- [ ] T018 [US1] Create raw text display component in frontend/src/components/ocr/RawTextDisplay.tsx
+- [ ] T019 [US1] Add image preprocessing (resize, format conversion) in frontend/src/lib/vision-api.ts
+- [ ] T020 [US1] Implement OCR status tracking (processing, completed, error) in frontend/src/context/BillContext.tsx
+
+**Checkpoint**: Receipt image upload and OCR extraction fully functional
+
+---
+
+## Phase 4: User Story 2 - Manual Correction of OCR Results (Priority: P2)
+
+**Goal**: Users can review, edit and correct OCR-extracted data before bill splitting
+
+**Independent Test**: Edit extracted line items and verify changes persist and affect calculations
+
+### Implementation for User Story 2
+
+- [ ] T021 [P] [US2] Create LineItem entity type in shared/src/types/bill.ts
+- [ ] T022 [P] [US2] Implement OCR text parser for line items in frontend/src/lib/ocr-parser.ts
+- [ ] T023 [P] [US2] Create editable line item component in frontend/src/components/bill/LineItemEditor.tsx
+- [ ] T024 [US2] Implement line item validation logic in frontend/src/lib/calculations.ts
+- [ ] T025 [US2] Create manual line item addition interface in frontend/src/components/bill/AddLineItem.tsx
+- [ ] T026 [US2] Add line item deletion functionality in frontend/src/components/bill/LineItemEditor.tsx
+- [ ] T027 [US2] Implement automatic subtotal calculation in frontend/src/context/BillContext.tsx
+- [ ] T028 [US2] Create bill summary display component in frontend/src/components/bill/BillSummary.tsx
+- [ ] T029 [US2] Add data persistence to session storage in frontend/src/lib/storage.ts
+
+**Checkpoint**: Bill editing and correction interface complete with real-time calculations
+
+---
+
+## Phase 5: User Story 3 - Split Bill Among Multiple People (Priority: P3)
+
+**Goal**: Users can assign items to people and automatically calculate individual amounts owed
+
+**Independent Test**: Assign line items to different people and verify correct split calculations with tax/tip distribution
+
+### Implementation for User Story 3
+
+- [ ] T030 [P] [US3] Create Person and ItemAssignment entities in shared/src/types/bill.ts
+- [ ] T031 [P] [US3] Implement person management interface in frontend/src/components/split/PersonManager.tsx
+- [ ] T032 [P] [US3] Create item assignment interface in frontend/src/components/split/ItemAssignments.tsx
+- [ ] T033 [US3] Implement proportional tax/tip distribution logic in frontend/src/lib/calculations.ts
+- [ ] T034 [US3] Create split calculation engine in frontend/src/context/BillReducer.ts
+- [ ] T035 [US3] Implement shared item splitting interface in frontend/src/components/split/SharedItems.tsx
+- [ ] T036 [US3] Create individual split results display in frontend/src/components/split/SplitResults.tsx
+- [ ] T037 [US3] Add color coding for person identification in frontend/src/components/split/PersonManager.tsx
+- [ ] T038 [US3] Implement split validation (100% assignment check) in frontend/src/lib/calculations.ts
+- [ ] T039 [US3] Create bill export functionality in frontend/src/components/split/ExportBill.tsx
+
+**Checkpoint**: Complete bill splitting functionality with visual person assignments
+
+---
+
+## Phase 6: API Integration (Optional - Backend Support)
+
+**Goal**: Rust API backend for calculation validation and potential future features
+
+**Independent Test**: API validates frontend calculations and returns consistent results
+
+### Implementation for API Support
+
+- [ ] T040 [P] Create Rust decimal models in api/src/models/bill.rs
+- [ ] T041 [P] Implement calculation validation endpoint in api/src/handlers/calculations.rs
+- [ ] T042 [P] Create API contract types in shared/src/types/api.ts
+- [ ] T043 Setup database schema for future persistence in api/migrations/
+- [ ] T044 [P] Add CORS and request validation middleware in api/src/main.rs
+- [ ] T045 [P] Implement error handling and logging in api/src/handlers/error.rs
+- [ ] T046 Create API client in frontend/src/lib/api-client.ts
+- [ ] T047 Add API integration to calculation functions in frontend/src/lib/calculations.ts
+
+**Checkpoint**: Backend API ready for calculation validation and future enhancements
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
+
+**Goal**: Production readiness with error handling, loading states, and user experience polish
+
+### Implementation for Production Readiness
+
+- [ ] T048 [P] Add comprehensive error boundaries in frontend/src/components/ErrorBoundary.tsx
+- [ ] T049 [P] Implement loading states for all async operations
+- [ ] T050 [P] Add responsive design for mobile/tablet in all components
+- [ ] T051 [P] Create comprehensive user onboarding/help text
+- [ ] T052 [P] Implement accessibility (ARIA labels, keyboard navigation)
+- [ ] T053 [P] Add data validation and sanitization throughout application
+- [ ] T054 [P] Optimize bundle size and implement code splitting
+- [ ] T055 Performance testing and optimization for OCR processing
+- [ ] T056 [P] Add analytics/telemetry for feature usage tracking
+
+**Final Checkpoint**: Production-ready OCR Bill Splitter application
+
+---
+
+## Dependencies
+
+### Story Completion Order
+```
+Setup (T001-T006) → Foundational (T007-T012) → 
+US1: OCR Extraction (T013-T020) → 
+US2: Manual Editing (T021-T029) → 
+US3: Bill Splitting (T030-T039) → 
+API Support (T040-T047) →
+Polish (T048-T056)
+```
+
+### Parallel Execution Opportunities
+
+**Phase 1-2**: T002, T003, T004, T006, T009, T010, T011 can run in parallel
+**Phase 3**: T013, T014, T015, T018 can run in parallel  
+**Phase 4**: T021, T022, T023, T025 can run in parallel
+**Phase 5**: T030, T031, T032, T037 can run in parallel
+**Phase 6**: T040, T041, T042, T044, T045 can run in parallel
+**Phase 7**: T048, T049, T050, T051, T052, T053, T054, T056 can run in parallel
+
+---
+
+## Implementation Strategy
+
+### MVP Scope (Recommended Start)
+- **Phase 1-3**: Complete User Story 1 for basic OCR functionality
+- Delivers immediate value: receipt scanning and text extraction
+- Independent and testable increment
+- Foundation for subsequent features
+
+### Incremental Delivery Plan
+1. **Week 1**: OCR Foundation (US1) - Basic receipt scanning
+2. **Week 2**: Data Editing (US2) - Manual correction interface  
+3. **Week 3**: Bill Splitting (US3) - Complete splitting functionality
+4. **Week 4**: Polish & Testing - Production readiness
+
+### Success Metrics
+- **Performance**: OCR processing <10s, API responses <200ms
+- **Accuracy**: 80% successful text extraction from typical receipts
+- **Usability**: 90% completion rate for full bill splitting flow
+- **Quality**: Zero calculation errors in financial arithmetic
 
 - [ ] T009 Create BillContext and state management in frontend/src/context/BillContext.tsx
 - [ ] T010 Implement BillReducer with actions in frontend/src/context/BillReducer.ts
