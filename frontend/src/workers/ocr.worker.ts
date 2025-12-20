@@ -1,7 +1,7 @@
 // OCR Web Worker for processing receipt images with Tesseract.js
 // This worker handles OCR processing in a separate thread to avoid blocking the main UI
 
-import { createWorker } from 'tesseract.js';
+import { createWorker, PSM, LoggerMessage } from 'tesseract.js';
 import type { 
   OCRWorkerMessage, 
   OCRProcessRequest, 
@@ -11,7 +11,7 @@ import type {
 } from '@bill-splitter/shared';
 
 // Worker global context
-const ctx: Worker = self as any;
+const ctx: Worker = self as unknown as Worker;
 
 ctx.onmessage = async (event: MessageEvent<OCRWorkerMessage>) => {
   const { type, payload } = event.data;
@@ -26,9 +26,9 @@ ctx.onmessage = async (event: MessageEvent<OCRWorkerMessage>) => {
   console.log('OCR Debug: Starting OCR processing for image:', imageFile.name);
 
   try {
-    // Create Tesseract worker with debug logging
-    const worker = await createWorker({
-      logger: (m) => {
+    // Create Tesseract worker with proper language configuration and debug logging
+    const worker = await createWorker([options.lang || 'eng'], 1, {
+      logger: (m: LoggerMessage) => {
         console.log('OCR Debug:', m); // Debug logging as requested
         
         // Send progress updates to main thread
@@ -45,43 +45,53 @@ ctx.onmessage = async (event: MessageEvent<OCRWorkerMessage>) => {
       }
     });
 
-    console.log('OCR Debug: Worker created, loading language');
+    console.log('OCR Debug: Worker initialized');
 
-    // Initialize worker with specified language
-    await worker.loadLanguage(options.lang || 'eng');
-    await worker.initialize(options.lang || 'eng');
-    
     // Configure for receipt recognition
     await worker.setParameters({
       tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,$ -()&',
-      tessedit_pageseg_mode: '6', // Uniform block of text
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK, // Uniform block of text
     });
 
     console.log('OCR Debug: Starting text recognition');
     const startTime = performance.now();
 
-    // Perform OCR recognition
-    const result = await worker.recognize(imageFile);
+    // Perform OCR recognition with blocks output for word information
+    const result = await worker.recognize(imageFile, {}, {
+      text: true,
+      blocks: true,
+      hocr: false,
+      tsv: false,
+    });
     const processingTime = performance.now() - startTime;
 
     console.log('OCR Debug: Recognition completed in', processingTime, 'ms');
     console.log('OCR Debug: Extracted text:', result.data.text);
     console.log('OCR Debug: Confidence:', result.data.confidence);
 
+    // Extract words from blocks data structure
+    const words = result.data.blocks?.flatMap(block => 
+      block.paragraphs?.flatMap(paragraph =>
+        paragraph.lines?.flatMap(line =>
+          line.words?.map((word: { text?: string; confidence?: number; bbox?: { x0?: number; y0?: number; x1?: number; y1?: number } }) => ({
+            text: word.text || '',
+            confidence: word.confidence || 0,
+            bbox: {
+              x0: word.bbox?.x0 || 0,
+              y0: word.bbox?.y0 || 0,
+              x1: word.bbox?.x1 || 0,
+              y1: word.bbox?.y1 || 0,
+            },
+          })) || []
+        ) || []
+      ) || []
+    ) || [];
+
     // Send completion event to main thread
     const completeEvent: OCRCompleteEvent = {
       text: result.data.text,
       confidence: result.data.confidence,
-      words: result.data.words?.map(word => ({
-        text: word.text,
-        confidence: word.confidence,
-        bbox: {
-          x0: word.bbox.x0,
-          y0: word.bbox.y0,
-          x1: word.bbox.x1,
-          y1: word.bbox.y1,
-        }
-      })) || [],
+      words: words,
       processingTime
     };
 
@@ -116,4 +126,4 @@ console.log('OCR Debug: OCR Worker initialized and ready');
 
 // Export worker type for TypeScript
 export {};
-export default null as any;
+export default undefined;

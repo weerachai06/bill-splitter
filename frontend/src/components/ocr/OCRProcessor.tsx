@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import Tesseract from "tesseract.js";
+import {
+  createWorker,
+  PSM,
+  OEM,
+  LoggerMessage,
+  RecognizeResult,
+} from "tesseract.js";
 import type {
   OCRCompleteEvent,
   OCRProgressEvent,
@@ -149,6 +155,7 @@ export function useOCRProcessor({
 
       try {
         processingRef.current = true;
+        const processingStartTime = Date.now();
         console.log("OCR Debug: Starting OCR processing for file:", file.name);
 
         // Convert file to image data
@@ -163,24 +170,6 @@ export function useOCRProcessor({
 
         const preprocessedImageData = await preprocessImageForOCR(imageData);
 
-        // Progress callback for Tesseract
-        const progressCallback = ({
-          progress,
-          status,
-        }: {
-          progress: number;
-          status: string;
-        }) => {
-          const progressPercent = Math.round(progress * 100);
-          console.log(`OCR Debug: ${status} - ${progressPercent}%`);
-
-          onOCRProgress({
-            progress: progressPercent,
-            status: status,
-            workerId: "",
-          });
-        };
-
         console.log("OCR Debug: Initializing Tesseract worker...");
         onOCRProgress({
           progress: 0,
@@ -188,95 +177,131 @@ export function useOCRProcessor({
           workerId: "",
         });
 
+        // Create worker with Thai and English language support
+        const worker = await createWorker(["tha", "eng"], 1, {
+          logger: (m: LoggerMessage) => {
+            if (m.status) {
+              console.log(
+                `OCR Debug: ${m.status}`,
+                m.progress ? `${Math.round(m.progress * 100)}%` : ""
+              );
+
+              // Handle initialization progress
+              if (
+                m.status === "loading tesseract core" ||
+                m.status === "initializing tesseract" ||
+                m.status === "loading language traineddata"
+              ) {
+                onOCRProgress({
+                  progress: Math.round((m.progress || 0) * 15), // Use first 15% for initialization
+                  status: m.status,
+                  workerId: "",
+                });
+              }
+
+              // Handle recognition progress
+              if (m.status === "recognizing text") {
+                const baseProgress = 15; // After initialization
+                const recognitionProgress = Math.round((m.progress || 0) * 70); // Use 70% for recognition
+                onOCRProgress({
+                  progress: baseProgress + recognitionProgress,
+                  status: m.status,
+                  workerId: "",
+                });
+              }
+            }
+          },
+        });
+
         // Try multiple OCR configurations for best results
         const ocrConfigurations = [
           {
-            lang: "tha+eng",
-            psm: Tesseract.PSM.AUTO,
+            psm: PSM.AUTO,
             name: "Auto segmentation",
           },
           {
-            lang: "tha+eng",
-            psm: Tesseract.PSM.SINGLE_BLOCK,
+            psm: PSM.SINGLE_BLOCK,
             name: "Single block",
           },
           {
-            lang: "tha+eng",
-            psm: Tesseract.PSM.SINGLE_COLUMN,
+            psm: PSM.SINGLE_COLUMN,
             name: "Single column",
           },
         ];
 
-        let bestResult: any = null;
+        let bestResult: RecognizeResult | null = null;
         let highestConfidence = 0;
 
-        for (let i = 0; i < ocrConfigurations.length; i++) {
-          const config = ocrConfigurations[i];
+        try {
+          for (let i = 0; i < ocrConfigurations.length; i++) {
+            const config = ocrConfigurations[i];
 
-          onOCRProgress({
-            progress: 20 + i * 25,
-            status: `Trying ${config.name} OCR...`,
-            workerId: "",
-          });
+            console.log(
+              `OCR Debug: Trying ${config.name} OCR configuration...`
+            );
 
-          try {
-            const result = await Tesseract.recognize(
-              preprocessedImageData,
-              config.lang,
-              {
-                logger: (m: any) => {
-                  if (m.status === "recognizing text") {
-                    const progress = 20 + i * 25 + m.progress * 25;
-                    progressCallback({
-                      progress: progress / 100,
-                      status: `${config.name}: ${m.status}`,
-                    });
-                  }
-                },
+            try {
+              // Set OCR parameters for this configuration
+              await worker.setParameters({
                 tessedit_pageseg_mode: config.psm,
-                tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+                tessedit_ocr_engine_mode: OEM.LSTM_ONLY,
                 preserve_interword_spaces: "1",
                 user_defined_dpi: "300",
+              });
+
+              const result = await worker.recognize(
+                preprocessedImageData,
+                {},
+                {
+                  text: true,
+                  blocks: true,
+                  hocr: false,
+                  tsv: false,
+                }
+              );
+
+              console.log(
+                `OCR Debug: ${config.name} - Confidence: ${result.data.confidence}%`
+              );
+              console.log(
+                `OCR Debug: ${config.name} - Text length: ${
+                  result.data.text.trim().length
+                }`
+              );
+
+              // Accept any result with text, prioritizing by confidence
+              if (
+                result.data.text.trim().length > 0 &&
+                result.data.confidence > highestConfidence
+              ) {
+                bestResult = result;
+                highestConfidence = result.data.confidence;
+                console.log(
+                  `OCR Debug: New best result with ${config.name}: ${highestConfidence}%`
+                );
+              } else if (!bestResult && result.data.text.trim().length > 0) {
+                // Take any result if we have none yet
+                bestResult = result;
+                highestConfidence = result.data.confidence;
+                console.log(
+                  `OCR Debug: First valid result with ${config.name}: ${highestConfidence}%`
+                );
+              } else if (!bestResult) {
+                // Store even empty results as potential fallback
+                bestResult = result;
+                highestConfidence = result.data.confidence;
+                console.log(
+                  `OCR Debug: Storing fallback result with ${config.name}: ${highestConfidence}%`
+                );
               }
-            );
-
-            console.log(
-              `OCR Debug: ${config.name} - Confidence: ${result.data.confidence}%`
-            );
-            console.log(
-              `OCR Debug: ${config.name} - Text length: ${
-                result.data.text.trim().length
-              }`
-            );
-
-            // Accept any result with text, prioritizing by confidence
-            if (
-              result.data.text.trim().length > 0 &&
-              result.data.confidence > highestConfidence
-            ) {
-              bestResult = result;
-              highestConfidence = result.data.confidence;
-              console.log(
-                `OCR Debug: New best result with ${config.name}: ${highestConfidence}%`
-              );
-            } else if (!bestResult && result.data.text.trim().length > 0) {
-              // Take any result if we have none yet
-              bestResult = result;
-              highestConfidence = result.data.confidence;
-              console.log(
-                `OCR Debug: First valid result with ${config.name}: ${highestConfidence}%`
-              );
-            } else if (!bestResult) {
-              // Store even empty results as potential fallback
-              bestResult = result;
-              highestConfidence = result.data.confidence;
-              console.log(
-                `OCR Debug: Storing fallback result with ${config.name}: ${highestConfidence}%`
-              );
+            } catch (error) {
+              console.log(`OCR Debug: ${config.name} failed:`, error);
             }
-          } catch (error) {
-            console.log(`OCR Debug: ${config.name} failed:`, error);
           }
+        } finally {
+          // Always terminate the worker to free memory
+          await worker.terminate();
+          console.log("OCR Debug: Worker terminated");
         }
 
         const result = bestResult;
@@ -315,10 +340,43 @@ export function useOCRProcessor({
         }
 
         // Send completion event with cleaned text
+        const words =
+          result.data.blocks?.flatMap(
+            (block) =>
+              block.paragraphs?.flatMap(
+                (paragraph) =>
+                  paragraph.lines?.flatMap(
+                    (line) =>
+                      line.words?.map(
+                        (word: {
+                          text?: string;
+                          confidence?: number;
+                          bbox?: {
+                            x0?: number;
+                            y0?: number;
+                            x1?: number;
+                            y1?: number;
+                          };
+                        }) => ({
+                          text: word.text || "",
+                          confidence: word.confidence || 0,
+                          bbox: {
+                            x0: word.bbox?.x0 || 0,
+                            y0: word.bbox?.y0 || 0,
+                            x1: word.bbox?.x1 || 0,
+                            y1: word.bbox?.y1 || 0,
+                          },
+                        })
+                      ) || []
+                  ) || []
+              ) || []
+          ) || [];
+
         onOCRComplete({
           text: cleanedText,
           confidence: result.data.confidence,
-          timestamp: new Date(),
+          words: words,
+          processingTime: Date.now() - processingStartTime,
         });
       } catch (error) {
         console.error("OCR Debug: OCR processing failed:", error);
@@ -326,8 +384,9 @@ export function useOCRProcessor({
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error occurred";
         onOCRError({
+          error: "OCR_PROCESSING_FAILED",
           message: errorMessage,
-          timestamp: new Date(),
+          details: error,
         });
       } finally {
         processingRef.current = false;

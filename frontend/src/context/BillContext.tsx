@@ -10,7 +10,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-import type { BillSplitterState } from "@bill-splitter/shared";
+import type { BillSplitterState, Receipt } from "@bill-splitter/shared";
 import {
   billReducer,
   initialState,
@@ -76,7 +76,7 @@ export function BillProvider({ children }: BillProviderProps) {
         try {
           sessionStorage.clear();
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (clearError) {
+        } catch {
           console.error("Unable to save state - session storage unavailable");
         }
       }
@@ -118,7 +118,7 @@ export function useActions() {
   const dispatch = useBillDispatch();
 
   return {
-    setReceipt: (receipt: BillSplitterState["receipt"]) =>
+    setReceipt: (receipt: Receipt) =>
       dispatch({ type: "SET_RECEIPT", payload: receipt }),
 
     setLineItems: (lineItems: BillSplitterState["lineItems"]) =>
