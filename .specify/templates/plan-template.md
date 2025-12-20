@@ -17,21 +17,25 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: [TypeScript/Next.js latest for frontend, Rust latest for API]  
+**Primary Dependencies**: [Next.js, Axum, Diesel, PostgreSQL]  
+**Storage**: [PostgreSQL with Diesel ORM for ACID compliance]  
+**Testing**: [Jest + React Testing Library for frontend, Cargo test for Rust API]  
+**Target Platform**: [Web application with responsive design]
+**Project Type**: [monorepo/web - determines source structure]  
+**Performance Goals**: [<200ms API response time, type-safe contracts]  
+**Constraints**: [Decimal arithmetic for financial data, ACID transactions]  
+**Scale/Scope**: [Multi-user bill splitting with real-time updates]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- ✅ Monorepo Architecture: Frontend, API, and shared types in separate directories
+- ✅ Type Safety First: TypeScript frontend, Rust API, OpenAPI contracts
+- ✅ Test-Driven Development: Tests required before implementation (NON-NEGOTIABLE)
+- ✅ Database Integrity: Decimal arithmetic, reversible migrations, ACID properties
+- ✅ API Design Standards: REST conventions, proper error handling, semantic versioning
 
 ## Project Structure
 
@@ -48,51 +52,31 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+bill-splitter/
+├── frontend/            # Next.js application with App Router
+│   ├── src/
+│   │   ├── app/        # Next.js App Router pages
+│   │   ├── components/ # Reusable React components
+│   │   └── lib/        # Frontend utilities
+│   └── tests/          # Frontend tests (Jest + React Testing Library)
+├── api/                # Rust backend API
+│   ├── src/
+│   │   ├── handlers/   # API route handlers
+│   │   ├── models/     # Database models with Diesel
+│   │   ├── database/   # Database connection and migrations
+│   │   └── main.rs     # Application entry point
+│   └── tests/          # API tests (Cargo test)
+├── shared/             # Shared TypeScript types and contracts
+│   ├── types/          # API and domain types
+│   └── index.ts        # Type exports
+└── .specify/           # Project specifications and templates
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Monorepo with clear module boundaries following constitutional 
+requirements. Frontend and API maintain independent builds while sharing type definitions
+through the shared directory for type safety across the application boundary.
 
 ## Complexity Tracking
 

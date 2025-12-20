@@ -1,0 +1,37 @@
+{
+  "name": "bill-splitter",
+  "version": "1.0.0",
+  "description": "A modern bill splitting application",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:api\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:api": "cd api && cargo run",
+    "build": "npm run build:frontend && npm run build:api",
+    "build:frontend": "cd frontend && npm run build",
+    "build:api": "cd api && cargo build --release",
+    "test": "npm run test:frontend && npm run test:api",
+    "test:frontend": "cd frontend && npm test",
+    "test:api": "cd api && cargo test",
+    "lint": "npm run lint:frontend && npm run lint:api",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:api": "cd api && cargo clippy",
+    "format": "npm run format:frontend && npm run format:api",
+    "format:frontend": "cd frontend && npm run format",
+    "format:api": "cd api && cargo fmt"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "keywords": ["bill-splitting", "expense-sharing", "finance", "nextjs", "rust"],
+  "author": "",
+  "license": "MIT"
+}
