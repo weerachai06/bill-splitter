@@ -2,6 +2,11 @@
 
 import { useCallback, useRef } from "react";
 import { processImageWithVision, isVisionAPIAvailable } from "@/lib/vision-api";
+import {
+  preprocessImage,
+  isPreprocessingSupported,
+  getFileSize,
+} from "@/lib/image-preprocessing";
 import type {
   OCRCompleteEvent,
   OCRProgressEvent,
@@ -106,23 +111,68 @@ export function useOCRProcessor({
           );
         }
 
+        // Check if image preprocessing is supported
+        if (!isPreprocessingSupported()) {
+          console.warn(
+            "OCR Debug: Image preprocessing not supported in this browser"
+          );
+        }
+
+        console.log("OCR Debug: Original image size:", getFileSize(file));
+
+        // Preprocess image for better OCR accuracy
+        onOCRProgress({
+          progress: 5,
+          status: "Preprocessing image...",
+          workerId: "",
+        });
+
+        let processedFile = file;
+        if (isPreprocessingSupported()) {
+          console.log("OCR Debug: Starting image preprocessing...");
+          const preprocessingResult = await preprocessImage(file, {
+            convertToGrayscale: true,
+            adjustContrast: true,
+            threshold: 128,
+            denoise: true,
+            sharpen: false,
+          });
+
+          processedFile = preprocessingResult.file;
+          console.log(
+            "OCR Debug: Image preprocessing completed in",
+            preprocessingResult.processingTime,
+            "ms"
+          );
+          console.log(
+            "OCR Debug: Applied filters:",
+            preprocessingResult.appliedFilters.join(", ")
+          );
+          console.log(
+            "OCR Debug: Processed image size:",
+            getFileSize(processedFile)
+          );
+        }
+
         // Initialize OCR with Vision API
         onOCRProgress({
-          progress: 0,
+          progress: 10,
           status: "Initializing Google Vision API...",
           workerId: "",
         });
 
         console.log("OCR Debug: Processing with Google Cloud Vision API...");
 
-        // Process image with Google Vision API
+        // Process preprocessed image with Google Vision API
         const result = await processImageWithVision(
-          file,
+          processedFile, // Use preprocessed image
           {}, // Use default config (API key from env)
           (progress: number, status: string) => {
             console.log(`OCR Debug: ${status} - ${Math.round(progress)}%`);
+            // Adjust progress to account for preprocessing step (10% already done)
+            const adjustedProgress = Math.round(10 + progress * 0.9);
             onOCRProgress({
-              progress: Math.round(progress),
+              progress: adjustedProgress,
               status,
               workerId: "",
             });
