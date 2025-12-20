@@ -1,12 +1,237 @@
-# Research: OCR Bill Splitter
+# Research Findings: OCR Bill Splitter
 
-**Feature**: OCR Bill Splitter  
-**Date**: December 20, 2025  
-**Phase**: 0 - Research & Outline
+**Date**: 2025-12-20  
+**Phase**: Phase 0 - Research & Resolution  
+**Purpose**: Resolve technical unknowns and establish implementation approach
 
-## Technical Decisions
+## Google Cloud Vision API Integration
 
-### OCR Library Choice: Tesseract.js
+### Decision: Google Cloud Vision API for OCR Processing
+
+**Rationale**: 
+- Superior accuracy compared to Tesseract.js, especially for receipts with varied fonts and layouts
+- Built-in text detection and document text detection capabilities
+- Handles multiple languages and character sets including Thai numbers
+- Cloud-based processing reduces client-side computational load
+- Robust error handling and confidence scoring
+
+**Implementation Approach**:
+- Use `@google-cloud/vision` SDK on backend for secure API key management  
+- Frontend uploads images to backend endpoint for OCR processing
+- Alternative: Direct browser integration with API key restrictions for pure frontend solution
+- Response caching to minimize API costs for repeated processing
+
+**Alternatives Considered**:
+- **Tesseract.js**: Rejected due to lower accuracy on complex receipts and larger bundle size
+- **AWS Textract**: Rejected due to higher complexity for document structure parsing
+- **Azure Computer Vision**: Rejected due to less robust multi-language support
+
+### Best Practices for Receipt OCR
+
+**Image Preprocessing**:
+- Convert to grayscale for better text detection
+- Apply contrast enhancement for low-quality images
+- Resize images to optimal resolution (1024-2048px width)
+- Support JPEG, PNG, and HEIC formats with automatic conversion
+
+**Text Processing Pipeline**:
+- Use document text detection for structured layout analysis
+- Implement confidence threshold filtering (>70% confidence)
+- Post-process extracted text with regex patterns for price normalization
+- Handle quantity patterns like "2x$10.50" and "3×Coffee"
+
+## Web Worker Implementation for OCR
+
+### Decision: Dedicated Web Worker for Image Processing
+
+**Rationale**:
+- Prevents UI blocking during image upload and processing operations
+- Enables background compression and format conversion
+- Allows concurrent processing of multiple images
+- Better error isolation and recovery
+
+**Implementation Strategy**:
+- Worker handles image compression, format conversion, and API communication
+- Main thread receives processed results via postMessage
+- Implement progress tracking for large image processing
+- Use transfer objects for efficient memory management
+
+**Technical Details**:
+```typescript
+// Worker responsibilities:
+// 1. Image compression and optimization
+// 2. Format conversion (HEIC → JPEG)
+// 3. API communication with Google Cloud Vision
+// 4. Progress reporting to main thread
+// 5. Error handling and retry logic
+```
+
+**Alternatives Considered**:
+- **Main thread processing**: Rejected due to UI blocking concerns
+- **Service worker**: Rejected as it's designed for background sync, not compute tasks
+- **WebAssembly**: Considered for future optimization but unnecessary complexity for MVP
+
+## Decimal Arithmetic for Financial Calculations
+
+### Decision: Decimal.js for Frontend, Rust decimal crate for Backend
+
+**Rationale**:
+- JavaScript Number type suffers from floating-point precision errors (0.1 + 0.2 ≠ 0.3)
+- Financial applications require exact decimal arithmetic per constitutional requirements
+- Decimal.js provides immutable decimal operations with configurable precision
+- Rust `decimal` crate offers high-performance decimal arithmetic with PostgreSQL integration
+
+**Frontend Implementation (Decimal.js)**:
+```typescript
+import Decimal from 'decimal.js';
+
+// Configure for financial precision (2 decimal places, bankers rounding)
+Decimal.config({
+  precision: 10,
+  rounding: Decimal.ROUND_HALF_EVEN,
+  toExpNeg: -9,
+  toExpPos: 9
+});
+
+// All monetary calculations
+const unitPrice = new Decimal('12.99');
+const quantity = new Decimal('3');
+const total = unitPrice.mul(quantity); // Exact: 38.97
+```
+
+**Backend Implementation (rust_decimal)**:
+```rust
+use decimal::d128;
+use diesel::sql_types::Numeric;
+
+// Database model with decimal precision
+#[derive(Queryable, Selectable)]
+pub struct LineItem {
+    pub id: i32,
+    pub unit_price: d128, // Maps to NUMERIC(10,2) in PostgreSQL
+    pub quantity: i32,
+    pub total_price: d128,
+}
+```
+
+**Database Schema**:
+- Use `NUMERIC(10,2)` type for all monetary values in PostgreSQL
+- Supports exact decimal storage with 2 decimal place precision
+- Prevents floating-point conversion errors in database layer
+
+**Alternatives Considered**:
+- **JavaScript Number**: Rejected due to precision errors with financial calculations
+- **Integer cents**: Rejected due to complexity in UI display and international currency support
+- **BigNumber.js**: Rejected in favor of Decimal.js for better API and smaller bundle size
+
+## PostgreSQL Integration with Rust Diesel
+
+### Decision: Diesel ORM with PostgreSQL NUMERIC Types
+
+**Rationale**:
+- Diesel provides compile-time query verification and type safety
+- Excellent PostgreSQL integration with decimal type support
+- Migration system ensures schema versioning and rollbacks
+- Connection pooling and transaction management built-in
+
+**Database Design Patterns**:
+```sql
+-- Migration for decimal precision tables
+CREATE TABLE line_items (
+    id SERIAL PRIMARY KEY,
+    receipt_id INTEGER NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price NUMERIC(10,2) NOT NULL,
+    total_price NUMERIC(10,2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Constraints for data integrity
+ALTER TABLE line_items 
+ADD CONSTRAINT positive_prices CHECK (unit_price >= 0 AND total_price >= 0);
+```
+
+**ACID Transaction Patterns**:
+- Wrap bill splitting calculations in database transactions
+- Use optimistic locking for concurrent bill modifications
+- Implement rollback procedures for calculation errors
+
+**Alternatives Considered**:
+- **SQLx**: Rejected in favor of Diesel for compile-time query checking
+- **SeaORM**: Rejected due to less mature PostgreSQL decimal integration
+- **Raw SQL**: Rejected due to lack of type safety and migration management
+
+## Image Processing Optimization
+
+### Decision: Client-Side Preprocessing with Server-Side OCR
+
+**Rationale**:
+- Reduce bandwidth and API costs by optimizing images before upload
+- Faster OCR processing with properly sized and formatted images
+- Better user experience with immediate visual feedback
+- Fallback handling for various image formats and qualities
+
+**Optimization Pipeline**:
+1. **Client-side preprocessing**:
+   - Resize to optimal dimensions (max 2048px width)
+   - Convert HEIC to JPEG for broader compatibility
+   - Apply basic contrast and sharpening filters
+   - Compress to balance quality vs. file size (85% JPEG quality)
+
+2. **Server-side processing**:
+   - Validate image format and size limits
+   - Additional preprocessing if needed (grayscale conversion)
+   - Google Cloud Vision API integration
+   - Response caching for repeated requests
+
+**Implementation Tools**:
+- **Frontend**: Canvas API for image manipulation, File API for uploads
+- **Backend**: Image crate in Rust for additional processing if needed
+- **Caching**: Redis or in-memory cache for processed OCR results
+
+**Performance Targets**:
+- Image preprocessing: <2 seconds for 5MB images
+- OCR processing: <10 seconds total (including API call)
+- Bundle size impact: <50KB for image processing utilities
+
+## Risk Mitigation & Fallbacks
+
+### OCR Processing Failures
+- **Graceful degradation**: Allow manual receipt entry if OCR fails
+- **Retry mechanisms**: Implement exponential backoff for API failures
+- **Offline capabilities**: Cache processed results for offline bill splitting
+
+### Image Quality Issues
+- **User guidance**: Provide tips for better receipt photos (lighting, angle, focus)
+- **Preprocessing feedback**: Show enhanced image preview before processing
+- **Manual correction**: Comprehensive editing interface for OCR results
+
+### Performance Constraints
+- **Progressive enhancement**: Core functionality works without image upload
+- **Lazy loading**: Load OCR features only when needed
+- **Error boundaries**: Isolate OCR failures from bill splitting functionality
+
+## Technology Integration Summary
+
+**Frontend Stack**:
+- Next.js 16+ with App Router for optimal performance
+- Decimal.js for exact financial calculations  
+- Canvas API for image preprocessing
+- Web Workers for background OCR processing
+
+**Backend Stack**:
+- Rust with Axum framework for high-performance API
+- Diesel ORM with PostgreSQL for ACID-compliant data storage
+- rust_decimal crate for server-side decimal arithmetic
+- Google Cloud Vision SDK for OCR processing
+
+**Shared Contracts**:
+- TypeScript interfaces in `/shared` directory
+- OpenAPI schema generation for API documentation
+- Decimal string representation for API data transfer
+
+This research establishes a solid foundation for implementing the OCR bill splitter with proper financial calculation precision, robust OCR processing, and constitutional compliance.
 
 **Decision**: Use Tesseract.js for client-side OCR processing  
 **Rationale**: 

@@ -103,8 +103,9 @@ const PATTERNS = {
   // Tip patterns (เบี้ยเพิ่ม, service charge, etc.)
   tip: /(?:tip|gratuity|service charge|เบี้ยเพิ่ม|ค่าบริการ)\s*:?\s*([฿$]?\s*[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+[.,][\d๐-๙]{2}\s*[฿$]?)/i,
   
-  // Quantity patterns with Thai numbers
-  quantity: /([\d๐-๙]+)\s*[x×]\s*(.+)|(.+)\s*[x×]\s*([\d๐-๙]+)/i,
+  // Enhanced quantity patterns with Thai numbers - supports {qty}x{price}, {qty}x formats
+  quantityPrice: /([\d๐-๙]+)\s*[x×]\s*([฿$]?\s*[\d๐-๙]+[.,]?[\d๐-๙]*\s*[฿$]?)/i,
+  quantityOnly: /([\d๐-๙]+)\s*[x×]\s*(.+)|(.+)\s*[x×]\s*([\d๐-๙]+)/i,
   
   // Date patterns (including Thai date format)
   date: /[\d๐-๙]{1,2}[\/\-][\d๐-๙]{1,2}[\/\-][\d๐-๙]{2,4}/,
@@ -300,6 +301,23 @@ function parseLineItem(line: string): CreateLineItemData | null {
     return null;
   }
 
+  // First, try to extract quantity and price patterns
+  const qtyPriceResult = extractQuantityAndPrice(line);
+  
+  // If we found a unit price from quantity pattern, use it
+  if (qtyPriceResult.unitPrice && qtyPriceResult.totalPrice) {
+    return {
+      name: qtyPriceResult.name,
+      quantity: qtyPriceResult.quantity,
+      unitPrice: qtyPriceResult.unitPrice,
+      totalPrice: qtyPriceResult.totalPrice,
+      category: null,
+      isShared: false,
+      extractedText: line,
+      manuallyEdited: false
+    };
+  }
+
   // Try different line item patterns
   let match = line.match(PATTERNS.lineItem);
   if (!match) {
@@ -307,26 +325,28 @@ function parseLineItem(line: string): CreateLineItemData | null {
   }
 
   if (match && match[1] && match[2]) {
-    const name = match[1].trim();
+    const nameText = match[1].trim();
     const priceStr = match[2].trim();
 
-    // Validate the name (should not be too short or contain only numbers)
-    if (name.length < 2 || /^\d+$/.test(name)) {
-      return null;
-    }
+    // Extract quantity and name
+    const qtyResult = extractQuantityAndPrice(nameText);
 
     const price = cleanPrice(priceStr);
     if (!price || parseFloat(price) <= 0) {
+      console.log('OCR Debug: Item rejected - no valid price:', line);
+      return null; // Remove items without valid prices
+    }
+
+    // Validate the name (should not be too short or contain only numbers)
+    if (qtyResult.name.length < 2 || /^\d+$/.test(qtyResult.name)) {
+      console.log('OCR Debug: Item rejected - invalid name:', line);
       return null;
     }
 
-    // Check for quantity in the name
-    const { name: cleanName, quantity } = extractQuantity(name);
-
     return {
-      name: cleanName,
-      quantity: quantity,
-      unitPrice: toDecimalString(parseFloat(price) / quantity),
+      name: qtyResult.name,
+      quantity: qtyResult.quantity,
+      unitPrice: toDecimalString(parseFloat(price) / qtyResult.quantity),
       totalPrice: price,
       category: null,
       isShared: false,
@@ -339,28 +359,58 @@ function parseLineItem(line: string): CreateLineItemData | null {
 }
 
 /**
- * Extract quantity from item name if present
+ * Extract quantity and price from item text if present
+ * Handles patterns like "2x$10.50", "3x Burger", etc.
  */
-function extractQuantity(name: string): { name: string; quantity: number } {
-  const quantityMatch = name.match(PATTERNS.quantity);
-  
-  if (quantityMatch) {
-    if (quantityMatch[1] && quantityMatch[2]) {
-      // "2x Item" format
+function extractQuantityAndPrice(text: string): { 
+  name: string; 
+  quantity: number; 
+  unitPrice?: string;
+  totalPrice?: string;
+} {
+  // First try to match quantity with price pattern: "2x$10.50"
+  const qtyPriceMatch = text.match(PATTERNS.quantityPrice);
+  if (qtyPriceMatch && qtyPriceMatch[1] && qtyPriceMatch[2]) {
+    const quantity = parseInt(convertThaiNumbers(qtyPriceMatch[1]));
+    const price = cleanPrice(qtyPriceMatch[2]);
+    
+    if (quantity > 0 && price && parseFloat(price) > 0) {
+      // Extract item name from remaining text
+      let name = text.replace(qtyPriceMatch[0], '').trim();
+      if (!name) name = 'Item';
+      
       return {
-        name: quantityMatch[2].trim(),
-        quantity: parseInt(quantityMatch[1])
-      };
-    } else if (quantityMatch[3] && quantityMatch[4]) {
-      // "Item x2" format
-      return {
-        name: quantityMatch[3].trim(),
-        quantity: parseInt(quantityMatch[4])
+        name: name,
+        quantity: quantity,
+        unitPrice: price,
+        totalPrice: toDecimalString(parseFloat(price) * quantity)
       };
     }
   }
+  
+  // Then try quantity only patterns: "2x Item" or "Item x2"
+  const qtyOnlyMatch = text.match(PATTERNS.quantityOnly);
+  if (qtyOnlyMatch) {
+    if (qtyOnlyMatch[1] && qtyOnlyMatch[2]) {
+      // "2x Item" format
+      const quantity = parseInt(convertThaiNumbers(qtyOnlyMatch[1]));
+      const name = qtyOnlyMatch[2].trim();
+      
+      if (quantity > 0 && name) {
+        return { name, quantity };
+      }
+    } else if (qtyOnlyMatch[3] && qtyOnlyMatch[4]) {
+      // "Item x2" format
+      const name = qtyOnlyMatch[3].trim();
+      const quantity = parseInt(convertThaiNumbers(qtyOnlyMatch[4]));
+      
+      if (quantity > 0 && name) {
+        return { name, quantity };
+      }
+    }
+  }
 
-  return { name, quantity: 1 };
+  return { name: text, quantity: 1 };
 }
 
 /**
@@ -371,7 +421,8 @@ function parseLineItemAggressive(line: string): CreateLineItemData | null {
   const priceMatches = line.match(PATTERNS.price);
   
   if (!priceMatches || priceMatches.length === 0) {
-    return null;
+    console.log('OCR Debug: Aggressive parsing - no prices found:', line);
+    return null; // Must have a price
   }
   
   // Take the last price match (usually the item price)
@@ -379,26 +430,28 @@ function parseLineItemAggressive(line: string): CreateLineItemData | null {
   const price = cleanPrice(priceStr);
   
   if (!price || parseFloat(price) <= 0) {
-    return null;
+    console.log('OCR Debug: Aggressive parsing - invalid price:', line, price);
+    return null; // Remove items without valid prices
   }
   
   // Extract name as everything before the price
   const priceIndex = line.lastIndexOf(priceStr);
-  let name = line.substring(0, priceIndex).trim();
+  let nameText = line.substring(0, priceIndex).trim();
   
   // Clean up the name
-  name = name.replace(/[.\s]+$/, '').trim();
+  nameText = nameText.replace(/[.\s]+$/, '').trim();
   
-  if (name.length < 2) {
-    name = `Item (${line.substring(0, 20)}...)`;
+  if (nameText.length < 2) {
+    nameText = `Item (${line.substring(0, 20)}...)`;
   }
   
-  const { name: cleanName, quantity } = extractQuantity(name);
+  // Extract quantity and clean name
+  const qtyResult = extractQuantityAndPrice(nameText);
   
   return {
-    name: cleanName,
-    quantity: quantity,
-    unitPrice: toDecimalString(parseFloat(price) / quantity),
+    name: qtyResult.name,
+    quantity: qtyResult.quantity,
+    unitPrice: toDecimalString(parseFloat(price) / qtyResult.quantity),
     totalPrice: price,
     category: null,
     isShared: false,
@@ -426,7 +479,8 @@ function parseLineItemFallback(line: string): CreateLineItemData | null {
   const numbers = line.match(/[\d๐-๙]+[.,][\d๐-๙]{2}|[\d๐-๙]+/g);
   
   if (!numbers) {
-    return null;
+    console.log('OCR Debug: Fallback parsing - no numbers found:', line);
+    return null; // Must have numbers that could be prices
   }
   
   // Try to find the most price-like number
@@ -445,26 +499,31 @@ function parseLineItemFallback(line: string): CreateLineItemData | null {
   }
   
   if (!bestPrice) {
-    return null;
+    console.log('OCR Debug: Fallback parsing - no valid price found:', line);
+    return null; // Remove items without valid prices
   }
   
   const price = cleanPrice(bestPrice);
   if (!price || parseFloat(price) <= 0) {
-    return null;
+    console.log('OCR Debug: Fallback parsing - price validation failed:', line, price);
+    return null; // Remove items without valid prices
   }
   
-  // Create a generic item name
-  let name = line.replace(/[\d๐-๙.,฿$]+/g, '').trim();
-  name = name.replace(/\s+/g, ' ');
+  // Create a item name from remaining text
+  let nameText = line.replace(/[\d๐-๙.,฿$]+/g, '').trim();
+  nameText = nameText.replace(/\s+/g, ' ');
   
-  if (name.length < 2) {
-    name = 'Menu Item';
+  if (nameText.length < 2) {
+    nameText = 'Menu Item';
   }
+  
+  // Extract quantity if present
+  const qtyResult = extractQuantityAndPrice(nameText);
   
   return {
-    name: name,
-    quantity: 1,
-    unitPrice: price,
+    name: qtyResult.name,
+    quantity: qtyResult.quantity,
+    unitPrice: toDecimalString(parseFloat(price) / qtyResult.quantity),
     totalPrice: price,
     category: null,
     isShared: false,
@@ -579,8 +638,21 @@ export function validateParsedReceipt(parsed: ParsedReceipt): {
 } {
   const warnings: string[] = [];
 
-  if (parsed.lineItems.length === 0) {
-    warnings.push('No line items found - you may need to add them manually');
+  // Filter out items without valid prices (additional safety check)
+  const validItems = parsed.lineItems.filter(item => {
+    const hasValidPrice = item.unitPrice && parseFloat(item.unitPrice) > 0;
+    if (!hasValidPrice) {
+      console.log('OCR Debug: Filtering out item without valid price:', item);
+    }
+    return hasValidPrice;
+  });
+
+  if (validItems.length === 0) {
+    warnings.push('No valid priced items found - you may need to add them manually');
+  } else if (validItems.length < parsed.lineItems.length) {
+    warnings.push(`${parsed.lineItems.length - validItems.length} items without prices were removed`);
+    // Update the parsed data to remove invalid items
+    parsed.lineItems = validItems;
   }
 
   if (!parsed.subtotal && !parsed.totalAmount) {
