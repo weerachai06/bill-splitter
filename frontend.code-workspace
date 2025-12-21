@@ -1,0 +1,24 @@
+{
+	"folders": [
+		{
+			"path": "frontend"
+		}
+  ],
+  "settings": {
+    "tailwindCSS.includeLanguages": {
+      "typescript": "typescript",
+      "typescriptreact": "typescriptreact",
+      "javascript": "javascript",
+      "javascriptreact": "javascriptreact"
+    },
+    "files.associations": {
+      "*.css": "tailwindcss"
+    },
+    "emmet.includeLanguages": {
+      "typescript": "html",
+      "typescriptreact": "html",
+      "javascript": "html",
+      "javascriptreact": "html"
+    }
+  }
+}
