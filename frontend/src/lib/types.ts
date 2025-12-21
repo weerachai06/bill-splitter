@@ -41,9 +41,9 @@ export function calculateTotal(bill: Bill): number {
 export function calculatePersonTotal(bill: Bill, personId: string): number {
   const total = calculateTotal(bill);
   const subtotal = calculateSubtotal(bill);
-  
+
   let personItemsTotal = 0;
-  
+
   for (const item of bill.items) {
     if (item.assignedTo.includes(personId)) {
       const itemTotal = calculateItemTotal(item);
@@ -51,22 +51,22 @@ export function calculatePersonTotal(bill: Bill, personId: string): number {
       personItemsTotal += itemTotal / shareCount;
     }
   }
-  
+
   if (subtotal === 0) return 0;
-  
+
   // Calculate proportional share of additional charges
   const additionalCharges = bill.tax + bill.serviceCharge - bill.discount;
   const proportionalShare = (personItemsTotal / subtotal) * additionalCharges;
-  
+
   return personItemsTotal + proportionalShare;
 }
 
 // Helper function to create an empty bill
 export function createEmptyBill(): Bill {
   return {
-    id: '',
-    title: 'New Bill',
-    date: new Date().toISOString().split('T')[0],
+    id: "",
+    title: "New Bill",
+    date: new Date().toISOString().split("T")[0],
     items: [],
     people: [],
     tax: 0,

@@ -4,7 +4,7 @@
     "ignore": [
       ".next/**",
       "out/**",
-      "build/**", 
+      "build/**",
       "node_modules/**",
       "next-env.d.ts",
       "cloudflare-env.d.ts",

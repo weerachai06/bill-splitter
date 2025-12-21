@@ -24,23 +24,23 @@ import {
   calculateTotal,
 } from "@/lib/types";
 import {
-  Camera,
-  DollarSign,
-  Receipt,
-  Users,
-  Upload,
-  Loader2,
-  CheckCircle,
   AlertCircle,
+  Camera,
+  CheckCircle,
+  DollarSign,
+  Loader2,
+  Receipt,
+  Upload,
+  Users,
 } from "lucide-react";
 import {
-  useState,
-  useCallback,
   JSXElementConstructor,
   Key,
   ReactElement,
   ReactNode,
   ReactPortal,
+  useCallback,
+  useState,
 } from "react";
 
 interface BillItemRowProps {
@@ -532,7 +532,7 @@ export function ExtractedDataDisplay({
                                 handleEditItem(
                                   index,
                                   "price",
-                                  parseFloat(e.target.value) || 0
+                                  Number.parseFloat(e.target.value) || 0
                                 )
                               }
                             />
@@ -549,7 +549,7 @@ export function ExtractedDataDisplay({
                                 handleEditItem(
                                   index,
                                   "quantity",
-                                  parseInt(e.target.value) || 1
+                                  Number.parseInt(e.target.value) || 1
                                 )
                               }
                             />
@@ -581,7 +581,10 @@ export function ExtractedDataDisplay({
                   type="number"
                   value={editedData.tax}
                   onChange={(e) =>
-                    handleEditField("tax", parseFloat(e.target.value) || 0)
+                    handleEditField(
+                      "tax",
+                      Number.parseFloat(e.target.value) || 0
+                    )
                   }
                   className="mt-1"
                 />
@@ -600,7 +603,7 @@ export function ExtractedDataDisplay({
                   onChange={(e) =>
                     handleEditField(
                       "service_charge",
-                      parseFloat(e.target.value) || 0
+                      Number.parseFloat(e.target.value) || 0
                     )
                   }
                   className="mt-1"
@@ -618,7 +621,10 @@ export function ExtractedDataDisplay({
                   type="number"
                   value={editedData.discount}
                   onChange={(e) =>
-                    handleEditField("discount", parseFloat(e.target.value) || 0)
+                    handleEditField(
+                      "discount",
+                      Number.parseFloat(e.target.value) || 0
+                    )
                   }
                   className="mt-1"
                 />

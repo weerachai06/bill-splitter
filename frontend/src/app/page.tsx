@@ -4,9 +4,8 @@ import {
   BillItemRow,
   BillSummary,
   PersonSummary,
-  ReceiptUploader,
-  ExtractedDataDisplay,
 } from "@/components/BillSplitter";
+import { FileUploadExtractor } from "@/components/FileUploadExtractor";
 import { PWAInstaller, PWAStatus } from "@/components/PWAComponents";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +25,7 @@ import {
   type Person,
   createEmptyBill,
 } from "@/lib/types";
-import { Plus, Receipt, Upload } from "lucide-react";
+import { CheckCircle, Plus, Receipt, Upload } from "lucide-react";
 import { useState } from "react";
 
 export default function Home() {
@@ -34,6 +33,7 @@ export default function Home() {
   const [newPersonName, setNewPersonName] = useState("");
   const [extractedData, setExtractedData] = useState<any>(null);
   const [currentTab, setCurrentTab] = useState("upload");
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const handleAssignToggle = (itemId: string, personId: string) => {
     setBill((prev) => ({
@@ -74,16 +74,12 @@ export default function Home() {
     }
   };
 
-  const handleExtractedData = (data: any) => {
+  const handleExtractComplete = (data: any) => {
     setExtractedData(data);
-    // Auto-switch to the next step after successful extraction
-    setTimeout(() => {
-      setCurrentTab("extracted");
-    }, 1000);
-  };
-
-  const handleEditExtractedData = (data: any) => {
-    setExtractedData(data);
+    // Also create the bill automatically for easier workflow
+    convertExtractedDataToBill(data);
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 5000);
   };
 
   const convertExtractedDataToBill = (data: any): void => {
@@ -120,11 +116,6 @@ export default function Home() {
     setCurrentTab("items");
   };
 
-  const handleFileUpload = (file: File) => {
-    // This is now handled by the ReceiptUploader component
-    console.log("File uploaded:", file.name);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -137,26 +128,48 @@ export default function Home() {
           <p className="text-gray-600">Split your bills easily with friends</p>
         </div>
 
+        {/* Success notification */}
+        {showSuccessMessage && (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                <span className="text-green-800 font-medium">
+                  ✅ Receipt processed successfully! Bill items have been
+                  created.
+                </span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => setCurrentTab("items")}
+                  className="text-green-700 p-0 h-auto"
+                >
+                  View Items →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Tabs
           value={currentTab}
           onValueChange={setCurrentTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-            <TabsTrigger value="extracted" disabled={!extractedData}>
-              Extracted
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="upload">Upload & Extract</TabsTrigger>
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="people">People</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-4">
-            <ReceiptUploader onExtractedData={handleExtractedData} />
+            <FileUploadExtractor onExtractComplete={handleExtractComplete} />
+
+            {/* Manual Bill Creation Option */}
             <Card>
               <CardHeader>
-                <CardTitle>Bill Information</CardTitle>
+                <CardTitle>Or Create Bill Manually</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -167,6 +180,7 @@ export default function Home() {
                     onChange={(e) =>
                       setBill((prev) => ({ ...prev, title: e.target.value }))
                     }
+                    placeholder="Enter bill title..."
                   />
                 </div>
                 <div>
@@ -180,18 +194,15 @@ export default function Home() {
                     }
                   />
                 </div>
+                <Button
+                  onClick={() => setCurrentTab("items")}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Continue to Add Items
+                </Button>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="extracted" className="space-y-4">
-            {extractedData && (
-              <ExtractedDataDisplay
-                extractedData={extractedData}
-                onCreateBill={convertExtractedDataToBill}
-                onEditData={handleEditExtractedData}
-              />
-            )}
           </TabsContent>
 
           <TabsContent value="items" className="space-y-4">
