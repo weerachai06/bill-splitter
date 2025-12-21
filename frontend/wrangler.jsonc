@@ -29,6 +29,10 @@
       "service": "bill-splitter"
     }
   ],
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
   "observability": {
     "enabled": true
   }
