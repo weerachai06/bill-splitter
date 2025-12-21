@@ -27,108 +27,60 @@ export async function POST(request: NextRequest) {
       - tax_amount (number)
       Please handle Thai language correctly.`;
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Send initial status
-          const encoder = new TextEncoder();
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type": "status", "message": "Starting analysis..."}\n\n'
-            )
-          );
+    // Check for required environment variables
+    if (!process.env.GOOGLE_AI_API_KEY) {
+      return NextResponse.json(
+        { error: "Missing Google AI API key" },
+        { status: 500 }
+      );
+    }
 
-          // Check for required environment variables
-          if (!process.env.GOOGLE_AI_API_KEY) {
-            throw new Error("Missing Google AI API key");
-          }
-
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type": "progress", "message": "Processing with Google Gemini..."}\n\n'
-            )
-          );
-
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
             {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      { text: prompt },
-                      {
-                        inline_data: {
-                          mime_type: "image/jpeg",
-                          data: base64,
-                        },
-                      },
-                    ],
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: base64,
                   },
-                ],
-                generationConfig: {
-                  maxOutputTokens: 1000,
-                  temperature: 0.1,
                 },
-              }),
-            }
-          );
+              ],
+            },
+          ],
+          generationConfig: {
+            maxOutputTokens: 1000,
+            temperature: 0.1,
+          },
+        }),
+      }
+    );
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(
-              `API Error: ${response.status} ${response.statusText} - ${errorText}`
-            );
-          }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `API Error: ${response.status} ${response.statusText} - ${errorText}`
+      );
+    }
 
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type": "progress", "message": "Extracting receipt data..."}\n\n'
-            )
-          );
+    const result = (await response.json()) as any;
+    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || result;
 
-          const result = (await response.json()) as any;
-          const content =
-            result.candidates?.[0]?.content?.parts?.[0]?.text || result;
-
-          // Send completion message
-          controller.enqueue(
-            encoder.encode(
-              `data: {"type": "complete", "data": ${JSON.stringify(content)}}\n\n`
-            )
-          );
-        } catch (error) {
-          console.error("Stream error:", error);
-          const encoder = new TextEncoder();
-          const errorMsg =
-            error instanceof Error ? error.message : "Unknown error";
-          controller.enqueue(
-            encoder.encode(
-              `data: {\"type\": \"error\", \"message\": \"${errorMsg}\"}\n\n`
-            )
-          );
-        } finally {
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache",
-        connection: "keep-alive",
-      },
+    return NextResponse.json({
+      success: true,
+      data: content,
     });
   } catch (error) {
     console.error("Error processing request:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: errorMsg }, { status: 500 });
   }
 }

@@ -117,9 +117,9 @@ export function FileUploadExtractor({
 
       setProcessingSteps([
         "📤 Preprocessing image...",
-        "🤖 Uploading to AI...",
+        "🤖 Analyzing with AI...",
       ]);
-      setExtractionStatus("Uploading processed image...");
+      setExtractionStatus("Processing with Google Gemini...");
 
       const formData = new FormData();
       formData.append("file", processedFile);
@@ -133,118 +133,52 @@ export function FileUploadExtractor({
         throw new Error(`Failed to process receipt: ${response.statusText}`);
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+      const result = (await response.json()) as any;
 
-      if (!reader) {
-        throw new Error("No response stream available");
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
-      let buffer = "";
+      setProcessingSteps([
+        "📤 Preprocessing image...",
+        "🤖 Analyzing with AI...",
+        "✅ Extraction complete!",
+      ]);
+      setExtractionStatus("✅ Receipt processed successfully!");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.trim() === "") continue;
-
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") break;
-
+      // Parse the AI response
+      let responseData = result.data;
+      if (typeof responseData === "string") {
+        try {
+          // Remove any markdown formatting
+          responseData = responseData.replace(/```json\s*|```/g, "").trim();
+          // Try to parse as JSON
+          responseData = JSON.parse(responseData);
+        } catch (firstError) {
+          // If parsing fails, try to extract JSON from text
+          const jsonMatch = responseData.match(/{[\s\S]*}/);
+          if (jsonMatch) {
             try {
-              const parsed = JSON.parse(data);
-
-              switch (parsed.type) {
-                case "status":
-                  setExtractionStatus(parsed.message);
-                  setProcessingSteps((prev) => [
-                    ...prev,
-                    `🤖 ${parsed.message}`,
-                  ]);
-                  break;
-                case "progress":
-                  setExtractionStatus("Analyzing receipt content...");
-                  setProcessingSteps((prev) => {
-                    const newSteps = [...prev];
-                    if (!newSteps.includes("🔍 Reading receipt text...")) {
-                      newSteps.push("🔍 Reading receipt text...");
-                    }
-                    return newSteps;
-                  });
-                  break;
-                case "complete": {
-                  setExtractionStatus("✅ Receipt processed successfully!");
-                  setProcessingSteps((prev) => [
-                    ...prev,
-                    "✅ Extraction complete!",
-                  ]);
-
-                  // Parse the AI response which might be a string
-                  let responseData = parsed.data;
-                  if (typeof responseData === "string") {
-                    try {
-                      // Remove any markdown formatting
-                      responseData = responseData
-                        .replace(/```json\s*|```/g, "")
-                        .trim();
-                      // Try to parse as JSON
-                      responseData = JSON.parse(responseData);
-                    } catch (firstError) {
-                      // If parsing fails, try to extract JSON from text
-                      const jsonMatch = responseData.match(/{[\s\S]*}/);
-                      if (jsonMatch) {
-                        try {
-                          responseData = JSON.parse(jsonMatch[0]);
-                        } catch (secondError) {
-                          console.error(
-                            "Failed to parse JSON from response:",
-                            secondError
-                          );
-                          setError(
-                            "Failed to parse extracted data - invalid JSON format"
-                          );
-                          break;
-                        }
-                      } else {
-                        console.error(
-                          "No valid JSON found in response:",
-                          firstError
-                        );
-                        setError("No valid JSON found in response");
-                        break;
-                      }
-                    }
-                  }
-
-                  const validatedData = validateExtractedData(responseData);
-                  if (validatedData) {
-                    setExtractedData(validatedData);
-                    onExtractComplete(validatedData);
-                  } else {
-                    setError("Failed to parse extracted data");
-                  }
-                  break;
-                }
-                case "error":
-                  setError(`❌ Error: ${parsed.message}`);
-                  setExtractionStatus(`❌ Error: ${parsed.message}`);
-                  setProcessingSteps((prev) => [
-                    ...prev,
-                    `❌ ${parsed.message}`,
-                  ]);
-                  break;
-              }
-            } catch (e) {
-              console.log("Ignoring parse error for chunk:", line, e);
+              responseData = JSON.parse(jsonMatch[0]);
+            } catch (secondError) {
+              console.error("Failed to parse JSON from response:", secondError);
+              setError("Failed to parse extracted data - invalid JSON format");
+              return;
             }
+          } else {
+            console.error("No valid JSON found in response:", firstError);
+            setError("No valid JSON found in response");
+            return;
           }
         }
+      }
+
+      const validatedData = validateExtractedData(responseData);
+      if (validatedData) {
+        setExtractedData(validatedData);
+        onExtractComplete(validatedData);
+      } else {
+        setError("Failed to validate extracted data");
       }
     } catch (error) {
       console.error("Receipt extraction error:", error);
