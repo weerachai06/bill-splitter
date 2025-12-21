@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 If the text is unclear, use your best logical guess based on price calculation.
 
 ### Rules:
-- Language: Thai for item names.
+- Language: Thai and English.
 - Date: Convert Thai BE year to Gregorian (e.g., 56 -> 2013).
 - Items: If items are split across lines, consolidate them.
 - Response: ONLY JSON.
