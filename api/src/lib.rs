@@ -1,6 +1,7 @@
 use axum::{routing::get, Router};
+use tokio_stream::StreamExt;
 use tower_service::Service;
-use worker::*;
+use worker::{ok::Ok, *};
 
 fn router() -> Router {
     Router::new().route("/", get(root))
@@ -15,6 +16,10 @@ async fn fetch(
     Ok(router().call(req).await?)
 }
 
-pub async fn root() -> &'static str {
-    "Hello Axum!"
+pub async fn root() -> axum::body::Body {
+    let stream = tokio_stream::iter(vec![0, 1, 2, 3, 4, 5])
+        .map(|i| format!("Chunk {}\n", i))
+        .map(|s| std::result::Result::<_, std::io::Error>::Ok(s.into_bytes()));
+
+    axum::body::Body::from_stream(stream)
 }
