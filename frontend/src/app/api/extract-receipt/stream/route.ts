@@ -56,10 +56,6 @@ export async function POST(request: NextRequest) {
               ],
             },
           ],
-          generationConfig: {
-            maxOutputTokens: 1000,
-            temperature: 0.1,
-          },
         }),
       }
     );
@@ -72,11 +68,30 @@ export async function POST(request: NextRequest) {
     }
 
     const result = (await response.json()) as any;
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || result;
+
+    // Extract text from Gemini response structure
+    let content = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Remove markdown formatting if present
+    content = content.replace(/```json\s*|\s*```/g, "").trim();
+
+    // Parse the cleaned JSON
+    let parsedContent: any;
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (error) {
+      // If direct parsing fails, try to extract JSON object
+      const jsonMatch = content.match(/{[\s\S]*}/);
+      if (jsonMatch) {
+        parsedContent = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error("No valid JSON found in response");
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      data: content,
+      data: parsedContent,
     });
   } catch (error) {
     console.error("Error processing request:", error);
