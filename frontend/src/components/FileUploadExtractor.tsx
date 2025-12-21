@@ -188,11 +188,31 @@ export function FileUploadExtractor({
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
-      const file = e.dataTransfer.files[0];
+      e.stopPropagation();
+
+      let file: File | null = null;
+
+      // Handle different drag sources
+      if (e.dataTransfer.files?.[0]) {
+        file = e.dataTransfer.files[0];
+      } else if (e.dataTransfer.items) {
+        // Handle drag from external sources
+        for (let i = 0; i < e.dataTransfer.items.length; i++) {
+          if (e.dataTransfer.items[i].kind === "file") {
+            file = e.dataTransfer.items[i].getAsFile();
+            break;
+          }
+        }
+      }
+
       if (file?.type.startsWith("image/")) {
         await handleFileSelect(file);
       } else if (file) {
         setError("Please select an image file (PNG, JPG, etc.)");
+      } else {
+        setError(
+          "Could not read the dropped file. Please try uploading directly."
+        );
       }
     },
     [handleFileSelect]
@@ -200,6 +220,12 @@ export function FileUploadExtractor({
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   return (
@@ -223,6 +249,7 @@ export function FileUploadExtractor({
               }`}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
             >
               {previewUrl ? (
                 <div className="space-y-4">
@@ -252,9 +279,11 @@ export function FileUploadExtractor({
                 className="hidden"
                 id="receipt-upload"
               />
-              <Label htmlFor="receipt-upload">
-                <Button variant="outline" className="cursor-pointer mt-4">
-                  {selectedFile ? "Change File" : "Choose & Extract"}
+              <Label htmlFor="receipt-upload" className="cursor-pointer">
+                <Button type="button" variant="outline" className="mt-4">
+                  <span>
+                    {selectedFile ? "Change File" : "Choose & Extract"}
+                  </span>
                 </Button>
               </Label>
             </div>
