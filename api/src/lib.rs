@@ -1,25 +1,39 @@
-use axum::{routing::get, Router};
-use tokio_stream::StreamExt;
-use tower_service::Service;
-use worker::{ok::Ok, *};
+use serde::{Deserialize, Serialize};
+use worker::*;
 
-fn router() -> Router {
-    Router::new().route("/", get(root))
+#[derive(Debug, Deserialize, Serialize)]
+struct GenericResponse {
+    status: u16,
+    message: String,
 }
 
 #[event(fetch)]
-async fn fetch(
-    req: HttpRequest,
-    _env: Env,
-    _ctx: Context,
-) -> Result<axum::http::Response<axum::body::Body>> {
-    Ok(router().call(req).await?)
+async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    Router::new()
+        .get_async("/foo", handle_get)
+        .post_async("/bar", handle_post)
+        .delete_async("/baz", handle_delete)
+        .run(req, env)
+        .await
 }
 
-pub async fn root() -> axum::body::Body {
-    let stream = tokio_stream::iter(vec![0, 1, 2, 3, 4, 5])
-        .map(|i| format!("Chunk {}\n", i))
-        .map(|s| std::result::Result::<_, std::io::Error>::Ok(s.into_bytes()));
+pub async fn handle_get(_: Request, _ctx: RouteContext<()>) -> worker::Result<Response> {
+    Response::from_json(&GenericResponse {
+        status: 200,
+        message: "You reached a GET route!".to_string(),
+    })
+}
 
-    axum::body::Body::from_stream(stream)
+pub async fn handle_post(_: Request, _ctx: RouteContext<()>) -> worker::Result<Response> {
+    Response::from_json(&GenericResponse {
+        status: 200,
+        message: "You reached a POST route!".to_string(),
+    })
+}
+
+pub async fn handle_delete(_: Request, _ctx: RouteContext<()>) -> worker::Result<Response> {
+    Response::from_json(&GenericResponse {
+        status: 200,
+        message: "You reached a DELETE route!".to_string(),
+    })
 }
