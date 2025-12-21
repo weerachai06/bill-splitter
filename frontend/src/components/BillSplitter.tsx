@@ -201,7 +201,7 @@ export function ReceiptUploader({ onExtractedData }: ReceiptUploaderProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
+      if (file?.type.startsWith("image/")) {
         handleFileSelect(file);
       }
     },

@@ -95,7 +95,7 @@ export function FileUploadExtractor({
                     return newSteps;
                   });
                   break;
-                case "complete":
+                case "complete": {
                   setExtractionStatus("✅ Receipt processed successfully!");
                   setProcessingSteps((prev) => [
                     ...prev,
@@ -109,6 +109,7 @@ export function FileUploadExtractor({
                     setError("Failed to parse extracted data");
                   }
                   break;
+                }
                 case "error":
                   setError(`❌ Error: ${parsed.message}`);
                   setExtractionStatus(`❌ Error: ${parsed.message}`);
@@ -136,6 +137,7 @@ export function FileUploadExtractor({
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const handleFileSelect = useCallback(async (file: File) => {
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
@@ -154,7 +156,7 @@ export function FileUploadExtractor({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
+    if (file?.type.startsWith("image/")) {
       handleFileSelect(file);
     } else if (file) {
       setError("Please select an image file (PNG, JPG, etc.)");
@@ -165,7 +167,7 @@ export function FileUploadExtractor({
     async (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
+      if (file?.type.startsWith("image/")) {
         await handleFileSelect(file);
       } else if (file) {
         setError("Please select an image file (PNG, JPG, etc.)");

@@ -2,6 +2,7 @@
   // Biome configuration
   "editor.defaultFormatter": "biomejs.biome",
   "editor.formatOnSave": true,
+  "biome.enabled": true,
   "editor.codeActionsOnSave": {
     "quickfix.biome": "explicit",
     "source.organizeImports.biome": "explicit"

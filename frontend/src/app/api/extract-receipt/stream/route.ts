@@ -36,11 +36,9 @@ export async function POST(request: NextRequest) {
       stream: true,
     });
 
-
     return new Response(stream, {
       headers: { "content-type": "text/event-stream" },
     });
-
   } catch (error) {
     console.error("Error processing request:", error);
     return NextResponse.json(

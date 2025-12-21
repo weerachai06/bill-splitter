@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Try to parse the AI response as JSON
+    // biome-ignore lint/suspicious/noImplicitAnyLet: <explanation>
     let extractedData;
     try {
       // Clean up the response - sometimes AI returns markdown formatted JSON
