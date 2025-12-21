@@ -30,6 +30,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -42,7 +43,7 @@ jobs:
 
       - name: Run Clippy
         working-directory: api
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
 
       - name: Run tests
         working-directory: api
@@ -60,20 +61,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: api
-
-      - name: Build for production
-        working-directory: api
-        run: cargo build --release
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
