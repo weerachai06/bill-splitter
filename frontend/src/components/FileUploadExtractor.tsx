@@ -34,19 +34,95 @@ export function FileUploadExtractor({
     useState<ExtractedReceiptData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Image preprocessing with service worker
+  const preprocessImage = async (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx?.drawImage(img, 0, 0);
+
+          const imageData = ctx?.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+
+          if (imageData) {
+            const messageHandler = (event: MessageEvent) => {
+              if (event.data.type === "IMAGE_PROCESSED") {
+                navigator.serviceWorker.removeEventListener(
+                  "message",
+                  messageHandler
+                );
+                const processedFile = new File(
+                  [event.data.processedBlob],
+                  file.name,
+                  {
+                    type: "image/jpeg",
+                  }
+                );
+                resolve(processedFile);
+              } else if (event.data.type === "IMAGE_PROCESS_ERROR") {
+                navigator.serviceWorker.removeEventListener(
+                  "message",
+                  messageHandler
+                );
+                console.error(
+                  "Service worker processing error:",
+                  event.data.error
+                );
+                resolve(file); // Fallback to original file
+              }
+            };
+
+            navigator.serviceWorker.addEventListener("message", messageHandler);
+            navigator.serviceWorker.controller?.postMessage({
+              type: "PROCESS_IMAGE",
+              imageData: imageData,
+            });
+          } else {
+            resolve(file);
+          }
+        };
+
+        img.onerror = () => resolve(file);
+        img.src = URL.createObjectURL(file);
+      } else {
+        // Fallback if service worker not available
+        resolve(file);
+      }
+    });
+  };
+
   // Move extractReceiptData before handleFileSelect
   const extractReceiptData = async (file?: File) => {
     const fileToProcess = file || selectedFile;
     if (!fileToProcess) return;
 
     setIsProcessing(true);
-    setProcessingSteps(["📤 Uploading image..."]);
-    setExtractionStatus("Initializing AI analysis...");
+    setProcessingSteps(["📤 Preprocessing image..."]);
+    setExtractionStatus("Optimizing image for AI analysis...");
     setError(null);
 
     try {
+      // Preprocess image with service worker
+      const processedFile = await preprocessImage(fileToProcess);
+
+      setProcessingSteps([
+        "📤 Preprocessing image...",
+        "🤖 Uploading to AI...",
+      ]);
+      setExtractionStatus("Uploading processed image...");
+
       const formData = new FormData();
-      formData.append("file", fileToProcess);
+      formData.append("file", processedFile);
 
       const response = await fetch("/api/extract-receipt/stream", {
         method: "POST",
