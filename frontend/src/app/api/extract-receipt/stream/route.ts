@@ -18,23 +18,20 @@ export async function POST(request: NextRequest) {
 
     const base64 = btoa(binaryString);
 
-    const prompt = `Act as a receipt OCR specialist. Convert this image into JSON. 
-If the text is unclear, use your best logical guess based on price calculation.
+    const prompt = `Analyze this receipt and return ONLY valid JSON (no markdown, no explanation):
 
-### Rules:
-- Language: Thai and English.
-- Date: Convert Thai BE year to Gregorian (e.g., 56 -> 2013).
-- Items: If items are split across lines, consolidate them.
-- Response: ONLY JSON.
-
-### Output Format:
 {
-  "restaurant_name": "string",
-  "date": "YYYY-MM-DD",
-  "items": [{"name": "string", "price": number, "quantity": number}],
-  "total": number,
+  "restaurant_name": "Restaurant name here",
+  "date": "2024-12-21",
+  "items": [{"name": "Item name", "price": 12.50, "quantity": 1}],
+  "tax": 1.25,
+  "service_charge": 0,
+  "discount": 0,
+  "total": 13.75,
   "currency": "THB"
-}`;
+}
+
+IMPORTANT: Use actual numbers (12.50) not words (float/int). Return only JSON.`;
 
     const stream = new ReadableStream({
       async start(controller) {

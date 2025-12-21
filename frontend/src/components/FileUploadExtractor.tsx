@@ -113,12 +113,35 @@ export function FileUploadExtractor({
                   let responseData = parsed.data;
                   if (typeof responseData === "string") {
                     try {
+                      // Remove any markdown formatting
+                      responseData = responseData
+                        .replace(/```json\s*|```/g, "")
+                        .trim();
+                      // Try to parse as JSON
                       responseData = JSON.parse(responseData);
-                    } catch {
+                    } catch (firstError) {
                       // If parsing fails, try to extract JSON from text
                       const jsonMatch = responseData.match(/{[\s\S]*}/);
                       if (jsonMatch) {
-                        responseData = JSON.parse(jsonMatch[0]);
+                        try {
+                          responseData = JSON.parse(jsonMatch[0]);
+                        } catch (secondError) {
+                          console.error(
+                            "Failed to parse JSON from response:",
+                            secondError
+                          );
+                          setError(
+                            "Failed to parse extracted data - invalid JSON format"
+                          );
+                          break;
+                        }
+                      } else {
+                        console.error(
+                          "No valid JSON found in response:",
+                          firstError
+                        );
+                        setError("No valid JSON found in response");
+                        break;
                       }
                     }
                   }
