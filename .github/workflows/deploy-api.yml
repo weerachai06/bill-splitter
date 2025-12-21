@@ -1,96 +1,84 @@
-name: Deploy API to Production
+name: Deploy API to Cloudflare Workers
 
 on:
-    push:
-        branches: [main]
-        paths:
-            - "api/**"
-            - ".github/workflows/deploy-api.yml"
-    pull_request:
-        branches: [main]
-        paths:
-            - "api/**"
-            - ".github/workflows/deploy-api.yml"
-    workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - ".github/workflows/deploy-api.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "api/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
 
 env:
-    RUST_VERSION: "stable"
+  RUST_VERSION: "stable"
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        name: Test API
+  test:
+    runs-on: ubuntu-latest
+    name: Test API
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-            - name: Setup Rust
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: ${{ env.RUST_VERSION }}
-                  profile: minimal
-                  override: true
-                  components: rustfmt, clippy
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
 
-            - name: Cache cargo registry
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cargo/registry
-                  key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: api
 
-            - name: Cache cargo index
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cargo/git
-                  key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check code formatting
+        working-directory: api
+        run: cargo fmt -- --check
 
-            - name: Cache cargo build
-              uses: actions/cache@v4
-              with:
-                  path: api/target
-                  key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run Clippy
+        working-directory: api
+        run: cargo clippy -- -D warnings
 
-            - name: Check code formatting
-              run: |
-                  cd api
-                  cargo fmt -- --check
+      - name: Run tests
+        working-directory: api
+        run: cargo test --verbose
 
-            - name: Run Clippy
-              run: |
-                  cd api
-                  cargo clippy -- -D warnings
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    name: Deploy to Cloudflare Workers
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-            - name: Run tests
-              run: |
-                  cd api
-                  cargo test --verbose
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    build:
-        runs-on: ubuntu-latest
-        name: Build API
-        needs: test
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: api
 
-            - name: Setup Rust
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: ${{ env.RUST_VERSION }}
-                  profile: minimal
-                  override: true
+      - name: Build for production
+        working-directory: api
+        run: cargo build --release
 
-            - name: Build for production
-              run: |
-                  cd api
-                  cargo build --release
-
-            - name: Upload artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: api-binary
-                  path: api/target/release/bill_splitter_api
-                  retention-days: 7
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: api
