@@ -1,0 +1,42 @@
+{
+  "recommendations": [
+    // Biome - Formatter and Linter
+    "biomejs.biome",
+
+    // Tailwind CSS IntelliSense
+    "bradlc.vscode-tailwindcss",
+
+    // React and TypeScript support
+    "ms-vscode.vscode-typescript-next",
+    "ms-vscode.vscode-json",
+
+    // Next.js support
+    "ms-vscode.vscode-eslint",
+
+    // Git and version control
+    "eamodio.gitlens",
+
+    // General productivity
+    "ms-vscode.vscode-json",
+    "yzhang.markdown-all-in-one",
+    "streetsidesoftware.code-spell-checker",
+
+    // PWA development
+    "ms-vscode.vscode-js-debug",
+
+    // Auto rename tag
+    "formulahendry.auto-rename-tag",
+
+    // Path intellisense
+    "christian-kohler.path-intellisense",
+
+    // Import cost
+    "wix.vscode-import-cost",
+
+    // TODO highlights
+    "wayou.vscode-todo-highlight",
+
+    // Color highlighting
+    "naumovs.color-highlight"
+  ]
+}

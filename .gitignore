@@ -12,10 +12,6 @@ dist/
 # Database
 diesel.toml
 
-# IDE
-.vscode/
-.idea/
-
 # OS
 .DS_Store
 Thumbs.db
