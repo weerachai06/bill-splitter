@@ -64,16 +64,23 @@ export function FileUploadExtractor({
         throw new Error("No response stream available");
       }
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
+          if (line.trim() === "") continue;
+
           if (line.startsWith("data: ")) {
-            const data = line.slice(6);
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") break;
+
             try {
               const parsed = JSON.parse(data);
 
@@ -101,7 +108,22 @@ export function FileUploadExtractor({
                     ...prev,
                     "✅ Extraction complete!",
                   ]);
-                  const validatedData = validateExtractedData(parsed.data);
+
+                  // Parse the AI response which might be a string
+                  let responseData = parsed.data;
+                  if (typeof responseData === "string") {
+                    try {
+                      responseData = JSON.parse(responseData);
+                    } catch {
+                      // If parsing fails, try to extract JSON from text
+                      const jsonMatch = responseData.match(/{[\s\S]*}/);
+                      if (jsonMatch) {
+                        responseData = JSON.parse(jsonMatch[0]);
+                      }
+                    }
+                  }
+
+                  const validatedData = validateExtractedData(responseData);
                   if (validatedData) {
                     setExtractedData(validatedData);
                     onExtractComplete(validatedData);
@@ -120,7 +142,7 @@ export function FileUploadExtractor({
                   break;
               }
             } catch (e) {
-              console.log("Ignoring parse error for chunk:", line);
+              console.log("Ignoring parse error for chunk:", line, e);
             }
           }
         }

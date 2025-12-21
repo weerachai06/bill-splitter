@@ -40,6 +40,30 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // Send initial status
+          const encoder = new TextEncoder();
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type": "status", "message": "Starting analysis..."}\n\n'
+            )
+          );
+
+          // Check for required environment variables
+          if (
+            !process.env.CLOUDFLARE_ACCOUNT_ID ||
+            !process.env.CLOUDFLARE_API_TOKEN
+          ) {
+            throw new Error("Missing Cloudflare credentials");
+          }
+
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type": "progress", "message": "Processing with Cloudflare AI..."}\n\n'
+            )
+          );
+
+          const imageData = `data:image/jpeg;base64,${base64}`;
+
           const response = await fetch(
             `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
             {
@@ -49,33 +73,55 @@ export async function POST(request: NextRequest) {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                prompt,
-                images: [{ type: "base64", data: base64 }],
-                stream: true,
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: prompt },
+                      { type: "image_url", image_url: { url: imageData } },
+                    ],
+                  },
+                ],
+                max_tokens: 1000,
               }),
             }
           );
 
-          if (!response.body) {
-            throw new Error("No response body");
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(
+              `API Error: ${response.status} ${response.statusText} - ${errorText}`
+            );
           }
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type": "progress", "message": "Extracting receipt data..."}\n\n'
+            )
+          );
 
-          while (true) {
-            const { done, value } = await reader.read();
+          const result = (await response.json()) as any;
+          const content =
+            result.result?.response ||
+            result.choices?.[0]?.message?.content ||
+            result;
 
-            if (done) {
-              break;
-            }
-
-            const chunk = decoder.decode(value, { stream: true });
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
+          // Send completion message
+          controller.enqueue(
+            encoder.encode(
+              `data: {"type": "complete", "data": ${JSON.stringify(content)}}\n\n`
+            )
+          );
         } catch (error) {
           console.error("Stream error:", error);
-          controller.error(error);
+          const encoder = new TextEncoder();
+          const errorMsg =
+            error instanceof Error ? error.message : "Unknown error";
+          controller.enqueue(
+            encoder.encode(
+              `data: {\"type\": \"error\", \"message\": \"${errorMsg}\"}\n\n`
+            )
+          );
         } finally {
           controller.close();
         }
@@ -83,7 +129,11 @@ export async function POST(request: NextRequest) {
     });
 
     return new Response(stream, {
-      headers: { "content-type": "text/event-stream" },
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("Error processing request:", error);
