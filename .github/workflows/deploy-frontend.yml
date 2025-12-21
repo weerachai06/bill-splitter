@@ -58,12 +58,12 @@ jobs:
 
       - name: Build application
         working-directory: frontend
-        run: pnpm run build
+        run: pnpm run cf:build
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy out --project-name=bill-splitter-frontend --compatibility-date=2024-12-21
+          command: pages deploy .vercel/output/static --project-name=bill-splitter-frontend --compatibility-date=2024-12-21
           workingDirectory: frontend

@@ -4,12 +4,17 @@
     "ignore": [
       ".next/**",
       "out/**",
-      "build/**",
+      "build/**", 
       "node_modules/**",
       "next-env.d.ts",
+      "cloudflare-env.d.ts",
       "pnpm-lock.yaml",
       "public/sw.js",
-      ".vscode/**"
+      ".vscode/**",
+      ".wrangler/**",
+      "wrangler.toml",
+      "_worker.js",
+      "worker.js"
     ]
   },
   "vcs": {

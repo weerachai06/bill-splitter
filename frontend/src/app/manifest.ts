@@ -4,7 +4,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Bill Splitter - Split Bills Made Easy",
     short_name: "Bill Splitter",
-    description: "A Progressive Web App for splitting bills among friends and colleagues easily",
+    description:
+      "A Progressive Web App for splitting bills among friends and colleagues easily",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

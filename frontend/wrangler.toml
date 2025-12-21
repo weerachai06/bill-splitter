@@ -1,8 +1,0 @@
-name = "bill-splitter-frontend"
-compatibility_date = "2024-12-21"
-
-[env.production]
-name = "bill-splitter-frontend"
-
-[env.preview]
-name = "bill-splitter-frontend-preview"
