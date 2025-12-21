@@ -2,7 +2,6 @@
 
 export interface ExtractedReceiptData {
   restaurant_name: string;
-  date: string;
   items: Array<{
     name: string;
     price: number;
@@ -12,7 +11,6 @@ export interface ExtractedReceiptData {
   service_charge: number;
   discount: number;
   total: number;
-  currency: string;
 }
 
 export interface ProcessingSteps {
@@ -27,7 +25,6 @@ export function validateExtractedData(data: any): ExtractedReceiptData | null {
     // Ensure required fields exist with defaults
     return {
       restaurant_name: data.restaurant_name || "Unknown Restaurant",
-      date: data.date || new Date().toISOString().split("T")[0],
       items: Array.isArray(data.items)
         ? data.items.map((item: any) => ({
             name: item.name || "Unknown Item",
@@ -39,7 +36,6 @@ export function validateExtractedData(data: any): ExtractedReceiptData | null {
       service_charge: Number.parseFloat(data.service_charge) || 0,
       discount: Number.parseFloat(data.discount) || 0,
       total: Number.parseFloat(data.total) || 0,
-      currency: data.currency || "THB",
     };
   } catch (error) {
     console.error("Failed to validate extracted data:", error);

@@ -18,20 +18,14 @@ export async function POST(request: NextRequest) {
 
     const base64 = btoa(binaryString);
 
-    const prompt = `Analyze this receipt and return ONLY valid JSON (no markdown, no explanation):
-
-{
-  "restaurant_name": "Restaurant name here",
-  "date": "2024-12-21",
-  "items": [{"name": "Item name", "price": 12.50, "quantity": 1}],
-  "tax": 1.25,
-  "service_charge": 0,
-  "discount": 0,
-  "total": 13.75,
-  "currency": "THB"
-}
-
-IMPORTANT: Use actual numbers (12.50) not words (float/int). Return only JSON.`;
+    const prompt = `Extract information from this bill/receipt. 
+      Return ONLY a JSON object with these keys:
+      - vendor_name (string)
+      - date (string)
+      - items (array of {name, price})
+      - total_amount (number)
+      - tax_amount (number)
+      Please handle Thai language correctly.`;
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -45,40 +39,41 @@ IMPORTANT: Use actual numbers (12.50) not words (float/int). Return only JSON.`;
           );
 
           // Check for required environment variables
-          if (
-            !process.env.CLOUDFLARE_ACCOUNT_ID ||
-            !process.env.CLOUDFLARE_API_TOKEN
-          ) {
-            throw new Error("Missing Cloudflare credentials");
+          if (!process.env.GOOGLE_AI_API_KEY) {
+            throw new Error("Missing Google AI API key");
           }
 
           controller.enqueue(
             encoder.encode(
-              'data: {"type": "progress", "message": "Processing with Cloudflare AI..."}\n\n'
+              'data: {"type": "progress", "message": "Processing with Google Gemini..."}\n\n'
             )
           );
 
-          const imageData = `data:image/jpeg;base64,${base64}`;
-
           const response = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
             {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                messages: [
+                contents: [
                   {
-                    role: "user",
-                    content: [
-                      { type: "text", text: prompt },
-                      { type: "image_url", image_url: { url: imageData } },
+                    parts: [
+                      { text: prompt },
+                      {
+                        inline_data: {
+                          mime_type: "image/jpeg",
+                          data: base64,
+                        },
+                      },
                     ],
                   },
                 ],
-                max_tokens: 1000,
+                generationConfig: {
+                  maxOutputTokens: 1000,
+                  temperature: 0.1,
+                },
               }),
             }
           );
@@ -98,9 +93,7 @@ IMPORTANT: Use actual numbers (12.50) not words (float/int). Return only JSON.`;
 
           const result = (await response.json()) as any;
           const content =
-            result.result?.response ||
-            result.choices?.[0]?.message?.content ||
-            result;
+            result.candidates?.[0]?.content?.parts?.[0]?.text || result;
 
           // Send completion message
           controller.enqueue(

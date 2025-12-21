@@ -449,18 +449,6 @@ export function FileUploadExtractor({
                   {extractedData.restaurant_name}
                 </p>
               </div>
-              <div>
-                <Label className="text-sm font-medium">Date</Label>
-                <p className="text-sm text-gray-700">{extractedData.date}</p>
-              </div>
-              {extractedData.currency && (
-                <div>
-                  <Label className="text-sm font-medium">Currency</Label>
-                  <p className="text-sm text-gray-700">
-                    {extractedData.currency}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
