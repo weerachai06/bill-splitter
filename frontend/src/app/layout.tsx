@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OCR Bill Splitter",
-  description: "Split bills easily using OCR technology",
+  title: "Bill Splitter",
+  description: "Split bills easily with friends using smart OCR technology",
 };
 
 export default function RootLayout({
