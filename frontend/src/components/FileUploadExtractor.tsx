@@ -133,10 +133,47 @@ export function FileUploadExtractor({
         throw new Error(`Failed to process receipt: ${response.statusText}`);
       }
 
-      const result = (await response.json()) as any;
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let responseData: any = null;
 
-      if (result?.error) {
-        throw new Error(result.error);
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // Process complete lines
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+
+                  if (data.type === "progress") {
+                    setExtractionStatus(data.message);
+                  } else if (data.type === "result") {
+                    responseData = data.data;
+                  }
+                } catch (parseError) {
+                  console.warn("Failed to parse streaming data:", parseError);
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      if (!responseData) {
+        throw new Error("No data received from streaming response");
       }
 
       setProcessingSteps([
@@ -146,33 +183,7 @@ export function FileUploadExtractor({
       ]);
       setExtractionStatus("✅ Receipt processed successfully!");
 
-      // Parse the AI response
-      let responseData = result.data;
-      if (typeof responseData === "string") {
-        try {
-          // Remove any markdown formatting
-          responseData = responseData.replace(/```json\s*|```/g, "").trim();
-          // Try to parse as JSON
-          responseData = JSON.parse(responseData);
-        } catch (firstError) {
-          // If parsing fails, try to extract JSON from text
-          const jsonMatch = responseData.match(/{[\s\S]*}/);
-          if (jsonMatch) {
-            try {
-              responseData = JSON.parse(jsonMatch[0]);
-            } catch (secondError) {
-              console.error("Failed to parse JSON from response:", secondError);
-              setError("Failed to parse extracted data - invalid JSON format");
-              return;
-            }
-          } else {
-            console.error("No valid JSON found in response:", firstError);
-            setError("No valid JSON found in response");
-            return;
-          }
-        }
-      }
-
+      // Data is already parsed from streaming, just validate it
       const validatedData = validateExtractedData(responseData);
       if (validatedData) {
         setExtractedData(validatedData);

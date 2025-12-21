@@ -89,9 +89,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: parsedContent,
+    // Create a readable stream for simple streaming response
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send progress update
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"type": "progress", "message": "Processing complete"}\n\n'
+          )
+        );
+
+        // Send the actual data
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({ type: "result", data: parsedContent })}\n\n`
+          )
+        );
+
+        // Close the stream
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("Error processing request:", error);
