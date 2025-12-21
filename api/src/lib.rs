@@ -16,13 +16,7 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get_async("/stream", handle_stream)
         .get_async("/ai", |_req, ctx| {
             let env = ctx.env.clone();
-            async move {
-                let ai_response = get_ai_response(env).await?;
-                Response::from_json(&GenericResponse {
-                    status: 200,
-                    message: ai_response,
-                })
-            }
+            async move { stream_ai_response(env).await }
         })
         .run(req, env)
         .await
@@ -64,6 +58,33 @@ pub async fn handle_stream(_: Request, _ctx: RouteContext<()>) -> worker::Result
     headers.set("Access-Control-Allow-Origin", "*")?;
 
     Ok(Response::ok(chunks)?.with_headers(headers))
+}
+
+pub async fn stream_ai_response(env: Env) -> worker::Result<Response> {
+    let ai_response = get_ai_response(env).await?;
+
+    // Split the AI response into chunks for streaming
+    let words: Vec<&str> = ai_response.split_whitespace().collect();
+    let chunks: String = words
+        .chunks(3) // Group words into chunks of 3
+        .enumerate()
+        .map(|(i, chunk_words)| {
+            worker::console_log!("Streaming AI chunk {}", i + 1);
+            let chunk_text = chunk_words.join(" ");
+            format!("data: {}\n\n", chunk_text)
+        })
+        .collect();
+
+    // Add final completion marker
+    let final_chunks = format!("{}data: [DONE]\n\n", chunks);
+
+    let headers = worker::Headers::new();
+    headers.set("Content-Type", "text/event-stream")?;
+    headers.set("Cache-Control", "no-cache")?;
+    headers.set("Connection", "keep-alive")?;
+    headers.set("Access-Control-Allow-Origin", "*")?;
+
+    Ok(Response::ok(final_chunks)?.with_headers(headers))
 }
 
 // ...existing code...
