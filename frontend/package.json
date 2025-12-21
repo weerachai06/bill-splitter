@@ -9,8 +9,9 @@
     "lint": "biome lint",
     "format": "biome format --write",
     "check": "biome check --write",
-    "deploy": "wrangler pages deploy out --project-name bill-splitter-frontend",
-    "preview": "wrangler pages dev out --port 3001"
+    "pages:dev": "wrangler pages dev out --port 3001 --compatibility-date=2024-12-21",
+    "pages:deploy": "wrangler pages deploy out --project-name=bill-splitter-frontend --compatibility-date=2024-12-21",
+    "pages:deploy:preview": "wrangler pages deploy out --project-name=bill-splitter-frontend-preview --compatibility-date=2024-12-21"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

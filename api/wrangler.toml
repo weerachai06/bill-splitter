@@ -1,0 +1,21 @@
+name = "bill-splitter-api"
+main = "src/lib.rs"
+compatibility_date = "2024-12-21"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "bill-splitter-api"
+
+[env.preview]
+name = "bill-splitter-api-preview"
+
+[build]
+command = "cargo build --release --target wasm32-unknown-unknown"
+
+[[kv_namespaces]]
+binding = "BILL_SPLITTER_KV"
+preview_id = ""
+id = ""
+
+[vars]
+ENVIRONMENT = "production"
