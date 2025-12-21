@@ -18,6 +18,7 @@ A full-stack application template with Rust API backend and Next.js frontend.
 │   ├── next-env.d.ts
 │   ├── next.config.ts                     # Next.js configuration
 │   ├── package.json                       # Dependencies and scripts
+│   ├── pnpm-lock.yaml                     # pnpm lockfile
 │   ├── postcss.config.mjs                 # PostCSS configuration
 │   ├── public/                            # Static assets
 │   │   ├── favicon.ico
@@ -58,6 +59,12 @@ A full-stack application template with Rust API backend and Next.js frontend.
 
 ## Getting Started
 
+### Prerequisites
+
+- Rust (latest stable version)
+- Node.js (18+ recommended)
+- pnpm (latest version)
+
 ### Backend (Rust API)
 
 ```bash
@@ -69,15 +76,32 @@ cargo run
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
+
+## Available Scripts
+
+### Frontend
+- `pnpm dev` - Start development server
+- `pnpm build` - Build for production
+- `pnpm start` - Start production server
+- `pnpm lint` - Run linting
+- `pnpm type-check` - Run TypeScript type checking
+
+### Backend
+- `cargo run` - Start development server
+- `cargo build` - Build for development
+- `cargo build --release` - Build for production
+- `cargo test` - Run tests
 
 ## Features
 
 - **Backend**: Basic Rust application template
 - **Frontend**: Next.js with TypeScript and Tailwind CSS
-- **UI Components**: Basic reusable components (Button, Card, Input)
+- **UI Components**: shadcn/ui component library
+- **PWA**: Progressive Web App capabilities
+- **Package Management**: pnpm for fast, efficient dependency management
 
 ## Development
 
@@ -95,4 +119,6 @@ npm run dev
 - React 19
 - TypeScript
 - Tailwind CSS
-- ESLint
+- shadcn/ui components
+- pnpm for package management
+- Biome for linting and formatting
