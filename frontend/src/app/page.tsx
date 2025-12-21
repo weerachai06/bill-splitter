@@ -5,6 +5,7 @@ import {
   BillSummary,
   PersonSummary,
   ReceiptUploader,
+  ExtractedDataDisplay,
 } from "@/components/BillSplitter";
 import { PWAInstaller, PWAStatus } from "@/components/PWAComponents";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type Bill, BillItem, type Person, mockBill } from "@/lib/mockData";
+import {
+  type Bill,
+  type BillItem,
+  type Person,
+  createEmptyBill,
+} from "@/lib/types";
 import { Plus, Receipt, Upload } from "lucide-react";
 import { useState } from "react";
 
 export default function Home() {
-  const [bill, setBill] = useState<Bill>(mockBill);
+  const [bill, setBill] = useState<Bill>(createEmptyBill());
   const [newPersonName, setNewPersonName] = useState("");
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [currentTab, setCurrentTab] = useState("upload");
 
   const handleAssignToggle = (itemId: string, personId: string) => {
     setBill((prev) => ({
@@ -66,10 +74,55 @@ export default function Home() {
     }
   };
 
+  const handleExtractedData = (data: any) => {
+    setExtractedData(data);
+    // Auto-switch to the next step after successful extraction
+    setTimeout(() => {
+      setCurrentTab("extracted");
+    }, 1000);
+  };
+
+  const handleEditExtractedData = (data: any) => {
+    setExtractedData(data);
+  };
+
+  const convertExtractedDataToBill = (data: any): void => {
+    // Generate default people if none exist
+    const defaultPeople: Person[] = [
+      { id: "person-1", name: "Person 1", color: "bg-blue-500" },
+      { id: "person-2", name: "Person 2", color: "bg-green-500" },
+      { id: "person-3", name: "Person 3", color: "bg-purple-500" },
+    ];
+
+    // Convert extracted items to BillItem format
+    const billItems: BillItem[] =
+      data.items?.map((item: any, index: number) => ({
+        id: `item-${index + 1}`,
+        name: item.name || `Item ${index + 1}`,
+        price: item.price || 0,
+        quantity: item.quantity || 1,
+        assignedTo: [], // Initially no one is assigned
+      })) || [];
+
+    // Create new bill from extracted data
+    const newBill: Bill = {
+      id: `bill-${Date.now()}`,
+      title: data.restaurant_name || "Extracted Receipt",
+      date: data.date || new Date().toISOString().split("T")[0],
+      items: billItems,
+      people: bill.people.length > 0 ? bill.people : defaultPeople,
+      tax: data.tax || 0,
+      serviceCharge: data.service_charge || 0,
+      discount: data.discount || 0,
+    };
+
+    setBill(newBill);
+    setCurrentTab("items");
+  };
+
   const handleFileUpload = (file: File) => {
-    // Mock OCR processing - in real app this would call OCR API
-    console.log("Uploaded file:", file.name);
-    // For demo, we'll just show the current mock data
+    // This is now handled by the ReceiptUploader component
+    console.log("File uploaded:", file.name);
   };
 
   return (
@@ -84,16 +137,23 @@ export default function Home() {
           <p className="text-gray-600">Split your bills easily with friends</p>
         </div>
 
-        <Tabs defaultValue="upload" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs
+          value={currentTab}
+          onValueChange={setCurrentTab}
+          className="space-y-6"
+        >
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="extracted" disabled={!extractedData}>
+              Extracted
+            </TabsTrigger>
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="people">People</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-4">
-            <ReceiptUploader onUpload={handleFileUpload} />
+            <ReceiptUploader onExtractedData={handleExtractedData} />
             <Card>
               <CardHeader>
                 <CardTitle>Bill Information</CardTitle>
@@ -122,6 +182,16 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="extracted" className="space-y-4">
+            {extractedData && (
+              <ExtractedDataDisplay
+                extractedData={extractedData}
+                onCreateBill={convertExtractedDataToBill}
+                onEditData={handleEditExtractedData}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="items" className="space-y-4">
