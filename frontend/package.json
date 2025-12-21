@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "biome lint",
     "format": "biome format --write",
-    "check": "biome check --write"
+    "check": "biome check --write",
+    "deploy": "wrangler pages deploy out --project-name bill-splitter-frontend",
+    "preview": "wrangler pages dev out --port 3001"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -37,7 +39,8 @@
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.56.0"
   },
   "packageManager": "pnpm@10.26.1"
 }

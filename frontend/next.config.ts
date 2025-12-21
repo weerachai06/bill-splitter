@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Cloudflare Pages static export configuration
+  output: 'export',
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
+  },
+  
   // PWA and security configuration
   async headers() {
     return [

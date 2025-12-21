@@ -1,0 +1,96 @@
+name: Deploy API to Production
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "api/**"
+            - ".github/workflows/deploy-api.yml"
+    pull_request:
+        branches: [main]
+        paths:
+            - "api/**"
+            - ".github/workflows/deploy-api.yml"
+    workflow_dispatch:
+
+env:
+    RUST_VERSION: "stable"
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        name: Test API
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: ${{ env.RUST_VERSION }}
+                  profile: minimal
+                  override: true
+                  components: rustfmt, clippy
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cargo/registry
+                  key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Cache cargo index
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cargo/git
+                  key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Cache cargo build
+              uses: actions/cache@v4
+              with:
+                  path: api/target
+                  key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Check code formatting
+              run: |
+                  cd api
+                  cargo fmt -- --check
+
+            - name: Run Clippy
+              run: |
+                  cd api
+                  cargo clippy -- -D warnings
+
+            - name: Run tests
+              run: |
+                  cd api
+                  cargo test --verbose
+
+    build:
+        runs-on: ubuntu-latest
+        name: Build API
+        needs: test
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: ${{ env.RUST_VERSION }}
+                  profile: minimal
+                  override: true
+
+            - name: Build for production
+              run: |
+                  cd api
+                  cargo build --release
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: api-binary
+                  path: api/target/release/bill_splitter_api
+                  retention-days: 7
