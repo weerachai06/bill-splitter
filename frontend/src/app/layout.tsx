@@ -13,8 +13,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bill Splitter",
-  description: "Split bills easily with friends using smart OCR technology",
+  title: "Bill Splitter - Split Bills Made Easy",
+  description:
+    "A Progressive Web App for splitting bills among friends and colleagues easily",
+  keywords: ["bill splitter", "expense sharing", "PWA", "split bills"],
+  authors: [{ name: "Bill Splitter Team" }],
+  metadataBase: new URL("https://localhost:3000"), // Change to your domain in production
+  openGraph: {
+    title: "Bill Splitter",
+    description: "Split bills easily with friends using smart OCR technology",
+    type: "website",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Bill Splitter",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({

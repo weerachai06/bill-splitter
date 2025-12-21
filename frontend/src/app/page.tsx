@@ -6,6 +6,7 @@ import {
   PersonSummary,
   ReceiptUploader,
 } from "@/components/BillSplitter";
+import { PWAInstaller, PWAStatus } from "@/components/PWAComponents";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,10 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* PWA Components */}
+        <PWAStatus />
+        <PWAInstaller />
+
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-gray-900">Bill Splitter</h1>
           <p className="text-gray-600">Split your bills easily with friends</p>
