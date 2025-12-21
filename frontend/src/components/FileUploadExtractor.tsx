@@ -34,47 +34,10 @@ export function FileUploadExtractor({
     useState<ExtractedReceiptData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileSelect = useCallback((file: File) => {
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setProcessingSteps([]);
-    setExtractionStatus("");
-    setExtractedData(null);
-    setError(null);
-
-    // Clean up previous URL
-    return () => URL.revokeObjectURL(url);
-  }, []);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      handleFileSelect(file);
-    } else if (file) {
-      setError("Please select an image file (PNG, JPG, etc.)");
-    }
-  };
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
-        handleFileSelect(file);
-      } else if (file) {
-        setError("Please select an image file (PNG, JPG, etc.)");
-      }
-    },
-    [handleFileSelect]
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
-  const extractReceiptData = async () => {
-    if (!selectedFile) return;
+  // Move extractReceiptData before handleFileSelect
+  const extractReceiptData = async (file?: File) => {
+    const fileToProcess = file || selectedFile;
+    if (!fileToProcess) return;
 
     setIsProcessing(true);
     setProcessingSteps(["📤 Uploading image..."]);
@@ -83,7 +46,7 @@ export function FileUploadExtractor({
 
     try {
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      formData.append("file", fileToProcess);
 
       const response = await fetch("/api/extract-receipt/stream", {
         method: "POST",
@@ -173,6 +136,48 @@ export function FileUploadExtractor({
     }
   };
 
+  const handleFileSelect = useCallback(async (file: File) => {
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    setProcessingSteps([]);
+    setExtractionStatus("");
+    setExtractedData(null);
+    setError(null);
+
+    // Automatically start extraction
+    await extractReceiptData(file);
+
+    // Clean up previous URL
+    return () => URL.revokeObjectURL(url);
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      handleFileSelect(file);
+    } else if (file) {
+      setError("Please select an image file (PNG, JPG, etc.)");
+    }
+  };
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) {
+        await handleFileSelect(file);
+      } else if (file) {
+        setError("Please select an image file (PNG, JPG, etc.)");
+      }
+    },
+    [handleFileSelect]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* File Upload Area */}
@@ -211,7 +216,7 @@ export function FileUploadExtractor({
                     Click to upload or drag and drop your receipt image
                   </p>
                   <p className="text-xs text-gray-500">
-                    Supports PNG, JPG, JPEG, and other image formats
+                    File will be processed automatically after selection
                   </p>
                 </div>
               )}
@@ -225,7 +230,7 @@ export function FileUploadExtractor({
               />
               <Label htmlFor="receipt-upload">
                 <Button variant="outline" className="cursor-pointer mt-4">
-                  {selectedFile ? "Change File" : "Choose File"}
+                  {selectedFile ? "Change File" : "Choose & Extract"}
                 </Button>
               </Label>
             </div>
@@ -236,28 +241,6 @@ export function FileUploadExtractor({
                 <AlertCircle className="h-4 w-4 text-red-500" />
                 <span className="text-sm text-red-700">{error}</span>
               </div>
-            )}
-
-            {/* Extract Button */}
-            {selectedFile && !error && (
-              <Button
-                onClick={extractReceiptData}
-                disabled={isProcessing}
-                className="w-full"
-                size="lg"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing Receipt...
-                  </>
-                ) : (
-                  <>
-                    <Camera className="mr-2 h-4 w-4" />
-                    Extract Receipt Data
-                  </>
-                )}
-              </Button>
             )}
 
             {/* Processing Status */}

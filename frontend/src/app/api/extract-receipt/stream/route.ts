@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
                     );
                   }
                 } catch (e) {
+                  console.log("Failed to parse chunk data:", data);
                   // Ignore parsing errors for individual chunks
                 }
               }
