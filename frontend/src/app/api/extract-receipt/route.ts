@@ -20,7 +20,13 @@ export async function POST(request: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const binaryString = Array.from(uint8Array)
+      .map((byte) => String.fromCharCode(byte))
+      .join("");
+
+    const base64 = btoa(binaryString);
 
     const prompt = `Analyze this receipt/bill image and extract the following information in JSON format:
     {
