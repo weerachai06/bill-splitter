@@ -18,25 +18,23 @@ export async function POST(request: NextRequest) {
 
     const base64 = btoa(binaryString);
 
-    const prompt =
-      "Analyze this receipt/bill image and extract the following information in JSON format:\n" +
-      "{\n" +
-      '  "restaurant_name": "Name of the restaurant or establishment",\n' +
-      '  "date": "Date in YYYY-MM-DD format",\n' +
-      '  "items": [\n' +
-      "    {\n" +
-      '      "name": "Item name",\n' +
-      '      "price": number,\n' +
-      '      "quantity": number\n' +
-      "    }\n" +
-      "  ],\n" +
-      '  "tax": number,\n' +
-      '  "service_charge": number,\n' +
-      '  "discount": number,\n' +
-      '  "total": number,\n' +
-      '  "currency": "Currency code (e.g., THB, USD)"\n' +
-      " Should support thai language if the bill is the thai language" +
-      "}";
+    const prompt = `Act as a receipt OCR specialist. Convert this image into JSON. 
+If the text is unclear, use your best logical guess based on price calculation.
+
+### Rules:
+- Language: Thai for item names.
+- Date: Convert Thai BE year to Gregorian (e.g., 56 -> 2013).
+- Items: If items are split across lines, consolidate them.
+- Response: ONLY JSON.
+
+### Output Format:
+{
+  "restaurant_name": "string",
+  "date": "YYYY-MM-DD",
+  "items": [{"name": "string", "price": number, "quantity": number}],
+  "total": number,
+  "currency": "THB"
+}`;
 
     const stream = new ReadableStream({
       async start(controller) {
