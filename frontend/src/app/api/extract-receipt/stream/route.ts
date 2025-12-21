@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       '  "discount": number,\n' +
       '  "total": number,\n' +
       '  "currency": "Currency code (e.g., THB, USD)"\n' +
+      " Should support thai language if the bill is the thai language" +
       "}";
 
     const stream = new ReadableStream({
