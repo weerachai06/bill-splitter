@@ -1,8 +1,11 @@
 {
-	"folders": [
-		{
-			"path": "frontend"
-		}
+  "folders": [
+    {
+      "path": "frontend"
+    },
+    {
+      "path": "api"
+    }
   ],
   "settings": {
     "tailwindCSS.includeLanguages": {
