@@ -203,18 +203,89 @@ export function FileUploadExtractor({
     }
   };
 
+  const resizeImage = (
+    file: File,
+    maxWidth: number,
+    maxHeight: number
+  ): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      img.onload = () => {
+        let { width, height } = img;
+
+        if (width > maxWidth || height > maxHeight) {
+          const aspectRatio = width / height;
+          if (width > height) {
+            width = maxWidth;
+            height = Math.round(maxWidth / aspectRatio);
+          } else {
+            height = maxHeight;
+            width = Math.round(maxHeight * aspectRatio);
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const resizedFile = new File([blob], file.name, {
+                type: file.type,
+              });
+              resolve(resizedFile);
+            } else {
+              reject("Canvas is empty");
+            }
+          },
+          file.type,
+          0.9
+        );
+      };
+
+      img.onerror = () => reject("Failed to load image");
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const toDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject("Failed to convert file to Data URL");
+        }
+      };
+      reader.onerror = () => {
+        reject("Failed to read file");
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const handleFileSelect = useCallback(async (file: File) => {
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
+    const resizedImage = await resizeImage(file, 224, 224);
+    setSelectedFile(resizedImage);
+
+    const url = URL.createObjectURL(resizedImage);
     setPreviewUrl(url);
     setProcessingSteps([]);
     setExtractionStatus("");
     setExtractedData(null);
     setError(null);
 
+    const base64 = await toDataUrl(resizedImage);
+    console.log("Base64 string length:", base64);
+
     // Automatically start extraction
-    await extractReceiptData(file);
+    // await extractReceiptData(file);
 
     // Clean up previous URL
     return () => URL.revokeObjectURL(url);
