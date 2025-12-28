@@ -203,53 +203,6 @@ export function FileUploadExtractor({
     }
   };
 
-  // Analyze image properties to determine optimal brightness and contrast
-  const analyzeImageProperties = (pixels: ImageData) => {
-    const data = pixels.data;
-    let totalBrightness = 0;
-    let brightnessValues: number[] = [];
-
-    // Convert to grayscale and collect brightness values
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-      totalBrightness += brightness;
-      brightnessValues.push(brightness);
-    }
-
-    const pixelCount = data.length / 4;
-    const avgBrightness = totalBrightness / pixelCount;
-
-    // Calculate contrast (standard deviation)
-    let variance = 0;
-    for (const brightness of brightnessValues) {
-      variance += Math.pow(brightness - avgBrightness, 2);
-    }
-    const standardDeviation = Math.sqrt(variance / pixelCount);
-
-    // Calculate histogram for better analysis
-    const histogram = new Array(256).fill(0);
-    for (const brightness of brightnessValues) {
-      histogram[Math.floor(brightness)]++;
-    }
-
-    // Find percentiles for better threshold estimation
-    const sortedValues = brightnessValues.sort((a, b) => a - b);
-    const p10 = sortedValues[Math.floor(pixelCount * 0.1)];
-    const p90 = sortedValues[Math.floor(pixelCount * 0.9)];
-
-    return {
-      avgBrightness,
-      contrast: standardDeviation,
-      p10,
-      p90,
-      histogram,
-    };
-  };
-
   // Advanced threshold detection using Otsu's method
   const calculateOtsuThreshold = (
     histogram: number[],
@@ -293,142 +246,6 @@ export function FileUploadExtractor({
     return optimalThreshold;
   };
 
-  // Multi-mode threshold detection
-  const detectOptimalThreshold = (analysis: any): number => {
-    const { histogram, avgBrightness, contrast, p10, p90 } = analysis;
-    const totalPixels = histogram.reduce(
-      (sum: number, count: number) => sum + count,
-      0
-    );
-
-    // Method 1: Otsu's method (best for bimodal distributions)
-    const otsuThreshold = calculateOtsuThreshold(histogram, totalPixels);
-
-    // Method 2: Percentile-based method (good for documents)
-    const percentileThreshold = (p10 + p90) / 2;
-
-    // Method 3: Mean-based method with adaptive offset
-    const adaptiveOffset = contrast < 30 ? 20 : contrast > 60 ? 5 : 10;
-    const meanThreshold = avgBrightness + adaptiveOffset;
-
-    // Method 4: Histogram analysis for document-specific threshold
-    let documentThreshold = 56;
-
-    // Find peaks in histogram (typical for text documents)
-    const peaks: { index: number; value: number }[] = [];
-    for (let i = 10; i < 246; i++) {
-      if (
-        histogram[i] > histogram[i - 1] &&
-        histogram[i] > histogram[i + 1] &&
-        histogram[i] > totalPixels * 0.001
-      ) {
-        peaks.push({ index: i, value: histogram[i] });
-      }
-    }
-
-    // Sort peaks by intensity
-    peaks.sort((a, b) => b.value - a.value);
-
-    if (peaks.length >= 2) {
-      // Document typically has two main peaks: background and text
-      const backgroundPeak =
-        peaks[0].index > peaks[1].index ? peaks[0] : peaks[1];
-      const textPeak = peaks[0].index < peaks[1].index ? peaks[0] : peaks[1];
-      documentThreshold = (backgroundPeak.index + textPeak.index) / 2;
-    }
-
-    // Combine methods with weights based on image characteristics
-    let finalThreshold: number;
-
-    if (contrast > 50 && peaks.length >= 2) {
-      // High contrast with clear bimodal distribution - trust Otsu + document analysis
-      finalThreshold = otsuThreshold * 0.5 + documentThreshold * 0.5;
-    } else if (p90 - p10 > 100) {
-      // Good dynamic range - trust percentile method
-      finalThreshold = otsuThreshold * 0.3 + percentileThreshold * 0.7;
-    } else if (contrast < 30) {
-      // Low contrast - be conservative with mean-based approach
-      finalThreshold = meanThreshold * 0.6 + otsuThreshold * 0.4;
-    } else {
-      // Balanced approach
-      finalThreshold =
-        otsuThreshold * 0.4 + percentileThreshold * 0.3 + meanThreshold * 0.3;
-    }
-
-    console.log("Threshold Detection Results:", {
-      otsu: otsuThreshold,
-      percentile: percentileThreshold,
-      meanBased: meanThreshold,
-      document: documentThreshold,
-      final: Math.round(finalThreshold),
-      peaks: peaks.slice(0, 3), // Show top 3 peaks
-    });
-
-    return Math.max(50, Math.min(220, Math.round(finalThreshold)));
-  };
-
-  // Calculate optimal enhancement settings based on image analysis
-  const calculateOptimalSettings = (analysis: any) => {
-    const { avgBrightness, contrast, p10, p90 } = analysis;
-
-    // Determine brightness adjustment
-    let brightnessAdjustment = 0;
-    if (avgBrightness < 80) {
-      // Dark image - brighten it
-      brightnessAdjustment = (80 - avgBrightness) * 0.8;
-    } else if (avgBrightness > 180) {
-      // Bright image - darken it slightly
-      brightnessAdjustment = (180 - avgBrightness) * 0.3;
-    }
-
-    // Determine contrast adjustment
-    let contrastMultiplier = 1.0;
-    if (contrast < 30) {
-      // Low contrast - increase it significantly
-      contrastMultiplier = 2.0 + (30 - contrast) * 0.05;
-    } else if (contrast < 50) {
-      // Medium-low contrast - increase moderately
-      contrastMultiplier = 1.5 + (50 - contrast) * 0.02;
-    } else if (contrast > 80) {
-      // High contrast - reduce slightly
-      contrastMultiplier = 1.2 - (contrast - 80) * 0.01;
-    } else {
-      // Good contrast - minor enhancement
-      contrastMultiplier = 1.3;
-    }
-
-    // Use advanced threshold detection instead of simple calculation
-    const optimalThreshold = detectOptimalThreshold(analysis);
-
-    return {
-      brightnessAdjustment: Math.max(-50, Math.min(50, brightnessAdjustment)),
-      contrastMultiplier: Math.max(1.0, Math.min(3.0, contrastMultiplier)),
-      optimalThreshold: optimalThreshold,
-    };
-  };
-
-  // Simple grayscale conversion only
-  const applyGrayscaleFilter = (pixels: ImageData): ImageData => {
-    const data = pixels.data;
-
-    // Convert to grayscale using luminance formula
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      // Convert to grayscale using standard luminance formula
-      const grayscale = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
-
-      data[i] = grayscale; // R
-      data[i + 1] = grayscale; // G
-      data[i + 2] = grayscale; // B
-      // Alpha channel remains unchanged
-    }
-
-    return pixels;
-  };
-
   const resizeImage = (
     file: File,
     maxWidth: number,
@@ -464,8 +281,7 @@ export function FileUploadExtractor({
         // Apply simple grayscale conversion only
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const grayscaleImageData = applyGrayscaleFilter(imageData);
-          ctx.putImageData(grayscaleImageData, 0, 0);
+          ctx.putImageData(imageData, 0, 0);
         }
 
         canvas.toBlob(
@@ -519,10 +335,9 @@ export function FileUploadExtractor({
     setError(null);
 
     const base64 = await toDataUrl(resizedImage);
-    console.log("Base64 string length:", base64);
 
     // Automatically start extraction
-    // await extractReceiptData(file);
+    await extractReceiptData(file);
 
     // Clean up previous URL
     return () => URL.revokeObjectURL(url);
