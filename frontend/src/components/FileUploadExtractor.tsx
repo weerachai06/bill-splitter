@@ -231,18 +231,100 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
+        // Convert to optimized grayscale for better OCR
+        if (ctx) {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+
+          // First pass: Convert to grayscale and collect histogram
+          const histogram = new Array(256).fill(0);
+          const grayscaleValues = new Uint8ClampedArray(data.length / 4);
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Convert to grayscale using luminance formula
+            const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+            grayscaleValues[i / 4] = grayscale;
+            histogram[grayscale]++;
+          }
+
+          // Calculate Otsu's threshold for optimal binary conversion
+          const totalPixels = grayscaleValues.length;
+          let sumTotal = 0;
+          for (let i = 0; i < 256; i++) {
+            sumTotal += i * histogram[i];
+          }
+
+          let sumBackground = 0;
+          let weightBackground = 0;
+          let weightForeground = 0;
+          let maxVariance = 0;
+          let optimalThreshold = 128;
+
+          for (let threshold = 0; threshold < 256; threshold++) {
+            weightBackground += histogram[threshold];
+            if (weightBackground === 0) continue;
+
+            weightForeground = totalPixels - weightBackground;
+            if (weightForeground === 0) break;
+
+            sumBackground += threshold * histogram[threshold];
+
+            const meanBackground = sumBackground / weightBackground;
+            const meanForeground =
+              (sumTotal - sumBackground) / weightForeground;
+
+            const variance =
+              weightBackground *
+              weightForeground *
+              Math.pow(meanBackground - meanForeground, 2);
+
+            if (variance > maxVariance) {
+              maxVariance = variance;
+              optimalThreshold = threshold;
+            }
+          }
+
+          // Apply light contrast enhancement and optimal threshold
+          for (let i = 0; i < data.length; i += 4) {
+            const grayscale = grayscaleValues[i / 4];
+
+            // Light contrast enhancement (much gentler than before)
+            const contrast = 1.2; // Reduced from 1.5
+            const enhanced = Math.min(
+              255,
+              Math.max(0, Math.round((grayscale - 128) * contrast + 128))
+            );
+
+            // Apply Otsu's threshold
+            const binaryValue = enhanced > optimalThreshold ? 255 : 0;
+
+            // Set RGB to the same binary value
+            data[i] = binaryValue; // Red
+            data[i + 1] = binaryValue; // Green
+            data[i + 2] = binaryValue; // Blue
+            // Alpha channel (data[i + 3]) remains unchanged
+          }
+
+          // Put the processed image data back to canvas
+          ctx.putImageData(imageData, 0, 0);
+        }
+
         canvas.toBlob(
           (blob) => {
             if (blob) {
               const resizedFile = new File([blob], file.name, {
-                type: file.type,
+                type: "image/jpeg", // Force JPEG for consistency
               });
               resolve(resizedFile);
             } else {
               reject("Canvas is empty");
             }
           },
-          file.type,
+          "image/jpeg",
           0.9
         );
       };
@@ -271,7 +353,7 @@ export function FileUploadExtractor({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const handleFileSelect = useCallback(async (file: File) => {
-    const resizedImage = await resizeImage(file, 224, 224);
+    const resizedImage = await resizeImage(file, 800, 800);
     setSelectedFile(resizedImage);
 
     const url = URL.createObjectURL(resizedImage);
