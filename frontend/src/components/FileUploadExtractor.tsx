@@ -245,12 +245,12 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Convert to black and white for better OCR
+        // Convert to grayscale only (remove black/white conversion)
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
 
-          // First pass: Convert to grayscale
+          // Convert to grayscale using luminance formula
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
@@ -259,14 +259,10 @@ export function FileUploadExtractor({
             // Convert to grayscale using luminance formula
             const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
 
-            // Apply simple threshold - safer approach
-            const threshold = 150; // More conservative threshold
-            const binaryValue = grayscale > threshold ? 255 : 0;
-
-            // Set RGB to the same binary value
-            data[i] = binaryValue; // Red
-            data[i + 1] = binaryValue; // Green
-            data[i + 2] = binaryValue; // Blue
+            // Set RGB to grayscale value (not binary)
+            data[i] = grayscale; // Red
+            data[i + 1] = grayscale; // Green
+            data[i + 2] = grayscale; // Blue
             // Alpha channel (data[i + 3]) remains unchanged
           }
 
