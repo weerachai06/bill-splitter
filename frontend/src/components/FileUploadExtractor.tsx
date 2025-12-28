@@ -250,6 +250,123 @@ export function FileUploadExtractor({
     };
   };
 
+  // Advanced threshold detection using Otsu's method
+  const calculateOtsuThreshold = (
+    histogram: number[],
+    totalPixels: number
+  ): number => {
+    let sumTotal = 0;
+    for (let i = 0; i < 256; i++) {
+      sumTotal += i * histogram[i];
+    }
+
+    let weightBackground = 0;
+    let weightForeground = 0;
+    let sumBackground = 0;
+    let maxVariance = 0;
+    let optimalThreshold = 0;
+
+    for (let threshold = 0; threshold < 256; threshold++) {
+      weightBackground += histogram[threshold];
+      if (weightBackground === 0) continue;
+
+      weightForeground = totalPixels - weightBackground;
+      if (weightForeground === 0) break;
+
+      sumBackground += threshold * histogram[threshold];
+
+      const meanBackground = sumBackground / weightBackground;
+      const meanForeground = (sumTotal - sumBackground) / weightForeground;
+
+      // Calculate between-class variance
+      const betweenClassVariance =
+        weightBackground *
+        weightForeground *
+        Math.pow(meanBackground - meanForeground, 2);
+
+      if (betweenClassVariance > maxVariance) {
+        maxVariance = betweenClassVariance;
+        optimalThreshold = threshold;
+      }
+    }
+
+    return optimalThreshold;
+  };
+
+  // Multi-mode threshold detection
+  const detectOptimalThreshold = (analysis: any): number => {
+    const { histogram, avgBrightness, contrast, p10, p90 } = analysis;
+    const totalPixels = histogram.reduce(
+      (sum: number, count: number) => sum + count,
+      0
+    );
+
+    // Method 1: Otsu's method (best for bimodal distributions)
+    const otsuThreshold = calculateOtsuThreshold(histogram, totalPixels);
+
+    // Method 2: Percentile-based method (good for documents)
+    const percentileThreshold = (p10 + p90) / 2;
+
+    // Method 3: Mean-based method with adaptive offset
+    const adaptiveOffset = contrast < 30 ? 20 : contrast > 60 ? 5 : 10;
+    const meanThreshold = avgBrightness + adaptiveOffset;
+
+    // Method 4: Histogram analysis for document-specific threshold
+    let documentThreshold = 56;
+
+    // Find peaks in histogram (typical for text documents)
+    const peaks: { index: number; value: number }[] = [];
+    for (let i = 10; i < 246; i++) {
+      if (
+        histogram[i] > histogram[i - 1] &&
+        histogram[i] > histogram[i + 1] &&
+        histogram[i] > totalPixels * 0.001
+      ) {
+        peaks.push({ index: i, value: histogram[i] });
+      }
+    }
+
+    // Sort peaks by intensity
+    peaks.sort((a, b) => b.value - a.value);
+
+    if (peaks.length >= 2) {
+      // Document typically has two main peaks: background and text
+      const backgroundPeak =
+        peaks[0].index > peaks[1].index ? peaks[0] : peaks[1];
+      const textPeak = peaks[0].index < peaks[1].index ? peaks[0] : peaks[1];
+      documentThreshold = (backgroundPeak.index + textPeak.index) / 2;
+    }
+
+    // Combine methods with weights based on image characteristics
+    let finalThreshold: number;
+
+    if (contrast > 50 && peaks.length >= 2) {
+      // High contrast with clear bimodal distribution - trust Otsu + document analysis
+      finalThreshold = otsuThreshold * 0.5 + documentThreshold * 0.5;
+    } else if (p90 - p10 > 100) {
+      // Good dynamic range - trust percentile method
+      finalThreshold = otsuThreshold * 0.3 + percentileThreshold * 0.7;
+    } else if (contrast < 30) {
+      // Low contrast - be conservative with mean-based approach
+      finalThreshold = meanThreshold * 0.6 + otsuThreshold * 0.4;
+    } else {
+      // Balanced approach
+      finalThreshold =
+        otsuThreshold * 0.4 + percentileThreshold * 0.3 + meanThreshold * 0.3;
+    }
+
+    console.log("Threshold Detection Results:", {
+      otsu: otsuThreshold,
+      percentile: percentileThreshold,
+      meanBased: meanThreshold,
+      document: documentThreshold,
+      final: Math.round(finalThreshold),
+      peaks: peaks.slice(0, 3), // Show top 3 peaks
+    });
+
+    return Math.max(50, Math.min(220, Math.round(finalThreshold)));
+  };
+
   // Calculate optimal enhancement settings based on image analysis
   const calculateOptimalSettings = (analysis: any) => {
     const { avgBrightness, contrast, p10, p90 } = analysis;
@@ -280,21 +397,13 @@ export function FileUploadExtractor({
       contrastMultiplier = 1.3;
     }
 
-    // Determine optimal threshold based on image characteristics
-    let optimalThreshold = 128; // Default
-
-    if (p90 - p10 > 100) {
-      // Good dynamic range
-      optimalThreshold = (p10 + p90) / 2;
-    } else {
-      // Limited dynamic range - use brightness-based threshold
-      optimalThreshold = Math.max(100, Math.min(180, avgBrightness + 10));
-    }
+    // Use advanced threshold detection instead of simple calculation
+    const optimalThreshold = detectOptimalThreshold(analysis);
 
     return {
       brightnessAdjustment: Math.max(-50, Math.min(50, brightnessAdjustment)),
       contrastMultiplier: Math.max(1.0, Math.min(3.0, contrastMultiplier)),
-      optimalThreshold: Math.max(80, Math.min(200, optimalThreshold)),
+      optimalThreshold: optimalThreshold,
     };
   };
 
