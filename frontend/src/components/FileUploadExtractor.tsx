@@ -203,14 +203,45 @@ export function FileUploadExtractor({
     }
   };
 
-  // Simple deskew image to correct minor rotation for better OCR
-  const deskewImage = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return canvas;
+  // Threshold filter function with improved text visibility
+  const applyThresholdFilter = (
+    pixels: ImageData,
+    threshold: number
+  ): ImageData => {
+    const data = pixels.data;
 
-    // For now, just return original canvas to avoid complexity
-    // TODO: Implement simpler deskew if needed
-    return canvas;
+    // Step 1: Convert to grayscale and enhance contrast first
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+
+      // Convert to grayscale using luminance formula
+      let grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      // Enhance contrast to make text more visible
+      const contrast = 5; // Increase contrast
+      const brightness = 80; // Add slight brightness
+      grayscale = (grayscale - 128) * contrast + 128 + brightness;
+      grayscale = Math.max(0, Math.min(255, grayscale)); // Clamp values
+
+      data[i] = grayscale;
+      data[i + 1] = grayscale;
+      data[i + 2] = grayscale;
+    }
+
+    // Step 2: Apply threshold with adjusted level for better text visibility
+    for (let i = 0; i < data.length; i += 4) {
+      const grayscale = data[i]; // Already processed above
+      // Use higher threshold for clearer text (120 instead of 96)
+      const value = grayscale >= threshold ? 255 : 0;
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
+      // Alpha channel remains unchanged
+    }
+
+    return pixels;
   };
 
   const resizeImage = (
@@ -245,29 +276,15 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Convert to grayscale only (remove black/white conversion)
+        // Apply threshold filter with improved text visibility
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-
-          // Convert to grayscale using luminance formula
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // Convert to grayscale using luminance formula
-            const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-
-            // Set RGB to grayscale value (not binary)
-            data[i] = grayscale; // Red
-            data[i + 1] = grayscale; // Green
-            data[i + 2] = grayscale; // Blue
-            // Alpha channel (data[i + 3]) remains unchanged
-          }
-
-          // Put the processed image data back to canvas
-          ctx.putImageData(imageData, 0, 0);
+          const thresholdLevel = 150; // Higher threshold for better text visibility (was 96)
+          const filteredImageData = applyThresholdFilter(
+            imageData,
+            thresholdLevel
+          );
+          ctx.putImageData(filteredImageData, 0, 0);
         }
 
         canvas.toBlob(
