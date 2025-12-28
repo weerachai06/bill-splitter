@@ -203,6 +203,16 @@ export function FileUploadExtractor({
     }
   };
 
+  // Simple deskew image to correct minor rotation for better OCR
+  const deskewImage = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return canvas;
+
+    // For now, just return original canvas to avoid complexity
+    // TODO: Implement simpler deskew if needed
+    return canvas;
+  };
+
   const resizeImage = (
     file: File,
     maxWidth: number,
@@ -216,14 +226,18 @@ export function FileUploadExtractor({
       img.onload = () => {
         let { width, height } = img;
 
-        if (width > maxWidth || height > maxHeight) {
+        // Use larger dimensions for better OCR quality
+        const targetMaxWidth = Math.max(maxWidth, 400);
+        const targetMaxHeight = Math.max(maxHeight, 400);
+
+        if (width > targetMaxWidth || height > targetMaxHeight) {
           const aspectRatio = width / height;
           if (width > height) {
-            width = maxWidth;
-            height = Math.round(maxWidth / aspectRatio);
+            width = targetMaxWidth;
+            height = Math.round(targetMaxWidth / aspectRatio);
           } else {
-            height = maxHeight;
-            width = Math.round(maxHeight * aspectRatio);
+            height = targetMaxHeight;
+            width = Math.round(targetMaxHeight * aspectRatio);
           }
         }
 
@@ -231,15 +245,12 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Convert to optimized grayscale for better OCR
+        // Convert to black and white for better OCR
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
 
-          // First pass: Convert to grayscale and collect histogram
-          const histogram = new Array(256).fill(0);
-          const grayscaleValues = new Uint8ClampedArray(data.length / 4);
-
+          // First pass: Convert to grayscale
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
@@ -247,60 +258,10 @@ export function FileUploadExtractor({
 
             // Convert to grayscale using luminance formula
             const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-            grayscaleValues[i / 4] = grayscale;
-            histogram[grayscale]++;
-          }
 
-          // Calculate Otsu's threshold for optimal binary conversion
-          const totalPixels = grayscaleValues.length;
-          let sumTotal = 0;
-          for (let i = 0; i < 256; i++) {
-            sumTotal += i * histogram[i];
-          }
-
-          let sumBackground = 0;
-          let weightBackground = 0;
-          let weightForeground = 0;
-          let maxVariance = 0;
-          let optimalThreshold = 128;
-
-          for (let threshold = 0; threshold < 256; threshold++) {
-            weightBackground += histogram[threshold];
-            if (weightBackground === 0) continue;
-
-            weightForeground = totalPixels - weightBackground;
-            if (weightForeground === 0) break;
-
-            sumBackground += threshold * histogram[threshold];
-
-            const meanBackground = sumBackground / weightBackground;
-            const meanForeground =
-              (sumTotal - sumBackground) / weightForeground;
-
-            const variance =
-              weightBackground *
-              weightForeground *
-              Math.pow(meanBackground - meanForeground, 2);
-
-            if (variance > maxVariance) {
-              maxVariance = variance;
-              optimalThreshold = threshold;
-            }
-          }
-
-          // Apply light contrast enhancement and optimal threshold
-          for (let i = 0; i < data.length; i += 4) {
-            const grayscale = grayscaleValues[i / 4];
-
-            // Light contrast enhancement (much gentler than before)
-            const contrast = 1.2; // Reduced from 1.5
-            const enhanced = Math.min(
-              255,
-              Math.max(0, Math.round((grayscale - 128) * contrast + 128))
-            );
-
-            // Apply Otsu's threshold
-            const binaryValue = enhanced > optimalThreshold ? 255 : 0;
+            // Apply simple threshold - safer approach
+            const threshold = 150; // More conservative threshold
+            const binaryValue = grayscale > threshold ? 255 : 0;
 
             // Set RGB to the same binary value
             data[i] = binaryValue; // Red
