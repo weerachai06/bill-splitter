@@ -25,8 +25,9 @@ import {
   type Person,
   createEmptyBill,
 } from "@/lib/types";
-import { CheckCircle, Plus, Receipt, Upload } from "lucide-react";
+import { CheckCircle, Plus, Receipt, Upload, QrCode } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function Home() {
   const [bill, setBill] = useState<Bill>(createEmptyBill());
@@ -123,9 +124,19 @@ export default function Home() {
         <PWAStatus />
         <PWAInstaller />
 
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-4">
           <h1 className="text-4xl font-bold text-gray-900">Bill Splitter</h1>
           <p className="text-gray-600">Split your bills easily with friends</p>
+
+          {/* Navigation to other features */}
+          <div className="flex justify-center">
+            <Link href="/promptpay">
+              <Button variant="outline" className="flex items-center gap-2">
+                <QrCode className="h-4 w-4" />
+                Generate PromptPay QR
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Success notification */}
