@@ -407,49 +407,22 @@ export function FileUploadExtractor({
     };
   };
 
-  // Threshold filter function with automatic brightness/contrast detection
-  const applyThresholdFilter = (
-    pixels: ImageData,
-    threshold: number
-  ): ImageData => {
+  // Simple grayscale conversion only
+  const applyGrayscaleFilter = (pixels: ImageData): ImageData => {
     const data = pixels.data;
 
-    // Step 1: Analyze image to determine optimal settings
-    const analysis = analyzeImageProperties(pixels);
-    const settings = calculateOptimalSettings(analysis);
-
-    console.log("Image Analysis:", analysis);
-    console.log("Optimal Settings:", settings);
-
-    // Step 2: Apply automatic brightness/contrast enhancement
+    // Convert to grayscale using luminance formula
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
 
-      // Convert to grayscale using luminance formula
-      let grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      // Convert to grayscale using standard luminance formula
+      const grayscale = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
 
-      // Apply automatic contrast and brightness
-      grayscale =
-        (grayscale - 128) * settings.contrastMultiplier +
-        128 +
-        settings.brightnessAdjustment;
-      grayscale = Math.max(0, Math.min(255, grayscale)); // Clamp values
-
-      data[i] = grayscale;
-      data[i + 1] = grayscale;
-      data[i + 2] = grayscale;
-    }
-
-    // Step 3: Apply threshold with automatically determined level
-    for (let i = 0; i < data.length; i += 4) {
-      const grayscale = data[i]; // Already processed above
-      // Use automatically calculated threshold
-      const value = grayscale >= settings.optimalThreshold ? 255 : 0;
-      data[i] = value;
-      data[i + 1] = value;
-      data[i + 2] = value;
+      data[i] = grayscale; // R
+      data[i + 1] = grayscale; // G
+      data[i + 2] = grayscale; // B
       // Alpha channel remains unchanged
     }
 
@@ -488,12 +461,11 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Apply automatic threshold filter with dynamic brightness/contrast detection
+        // Apply simple grayscale conversion only
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          // Threshold parameter is now ignored as it's calculated automatically
-          const filteredImageData = applyThresholdFilter(imageData, 0);
-          ctx.putImageData(filteredImageData, 0, 0);
+          const grayscaleImageData = applyGrayscaleFilter(imageData);
+          ctx.putImageData(grayscaleImageData, 0, 0);
         }
 
         canvas.toBlob(
@@ -536,7 +508,7 @@ export function FileUploadExtractor({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const handleFileSelect = useCallback(async (file: File) => {
-    const resizedImage = await resizeImage(file, 800, 800);
+    const resizedImage = await resizeImage(file, 400, 400);
     setSelectedFile(resizedImage);
 
     const url = URL.createObjectURL(resizedImage);
