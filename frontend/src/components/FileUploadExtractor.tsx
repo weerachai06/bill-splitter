@@ -203,14 +203,116 @@ export function FileUploadExtractor({
     }
   };
 
-  // Threshold filter function with improved text visibility
+  // Analyze image properties to determine optimal brightness and contrast
+  const analyzeImageProperties = (pixels: ImageData) => {
+    const data = pixels.data;
+    let totalBrightness = 0;
+    let brightnessValues: number[] = [];
+
+    // Convert to grayscale and collect brightness values
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      totalBrightness += brightness;
+      brightnessValues.push(brightness);
+    }
+
+    const pixelCount = data.length / 4;
+    const avgBrightness = totalBrightness / pixelCount;
+
+    // Calculate contrast (standard deviation)
+    let variance = 0;
+    for (const brightness of brightnessValues) {
+      variance += Math.pow(brightness - avgBrightness, 2);
+    }
+    const standardDeviation = Math.sqrt(variance / pixelCount);
+
+    // Calculate histogram for better analysis
+    const histogram = new Array(256).fill(0);
+    for (const brightness of brightnessValues) {
+      histogram[Math.floor(brightness)]++;
+    }
+
+    // Find percentiles for better threshold estimation
+    const sortedValues = brightnessValues.sort((a, b) => a - b);
+    const p10 = sortedValues[Math.floor(pixelCount * 0.1)];
+    const p90 = sortedValues[Math.floor(pixelCount * 0.9)];
+
+    return {
+      avgBrightness,
+      contrast: standardDeviation,
+      p10,
+      p90,
+      histogram,
+    };
+  };
+
+  // Calculate optimal enhancement settings based on image analysis
+  const calculateOptimalSettings = (analysis: any) => {
+    const { avgBrightness, contrast, p10, p90 } = analysis;
+
+    // Determine brightness adjustment
+    let brightnessAdjustment = 0;
+    if (avgBrightness < 80) {
+      // Dark image - brighten it
+      brightnessAdjustment = (80 - avgBrightness) * 0.8;
+    } else if (avgBrightness > 180) {
+      // Bright image - darken it slightly
+      brightnessAdjustment = (180 - avgBrightness) * 0.3;
+    }
+
+    // Determine contrast adjustment
+    let contrastMultiplier = 1.0;
+    if (contrast < 30) {
+      // Low contrast - increase it significantly
+      contrastMultiplier = 2.0 + (30 - contrast) * 0.05;
+    } else if (contrast < 50) {
+      // Medium-low contrast - increase moderately
+      contrastMultiplier = 1.5 + (50 - contrast) * 0.02;
+    } else if (contrast > 80) {
+      // High contrast - reduce slightly
+      contrastMultiplier = 1.2 - (contrast - 80) * 0.01;
+    } else {
+      // Good contrast - minor enhancement
+      contrastMultiplier = 1.3;
+    }
+
+    // Determine optimal threshold based on image characteristics
+    let optimalThreshold = 128; // Default
+
+    if (p90 - p10 > 100) {
+      // Good dynamic range
+      optimalThreshold = (p10 + p90) / 2;
+    } else {
+      // Limited dynamic range - use brightness-based threshold
+      optimalThreshold = Math.max(100, Math.min(180, avgBrightness + 10));
+    }
+
+    return {
+      brightnessAdjustment: Math.max(-50, Math.min(50, brightnessAdjustment)),
+      contrastMultiplier: Math.max(1.0, Math.min(3.0, contrastMultiplier)),
+      optimalThreshold: Math.max(80, Math.min(200, optimalThreshold)),
+    };
+  };
+
+  // Threshold filter function with automatic brightness/contrast detection
   const applyThresholdFilter = (
     pixels: ImageData,
     threshold: number
   ): ImageData => {
     const data = pixels.data;
 
-    // Step 1: Convert to grayscale and enhance contrast first
+    // Step 1: Analyze image to determine optimal settings
+    const analysis = analyzeImageProperties(pixels);
+    const settings = calculateOptimalSettings(analysis);
+
+    console.log("Image Analysis:", analysis);
+    console.log("Optimal Settings:", settings);
+
+    // Step 2: Apply automatic brightness/contrast enhancement
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
@@ -219,10 +321,11 @@ export function FileUploadExtractor({
       // Convert to grayscale using luminance formula
       let grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-      // Enhance contrast to make text more visible
-      const contrast = 5; // Increase contrast
-      const brightness = 80; // Add slight brightness
-      grayscale = (grayscale - 128) * contrast + 128 + brightness;
+      // Apply automatic contrast and brightness
+      grayscale =
+        (grayscale - 128) * settings.contrastMultiplier +
+        128 +
+        settings.brightnessAdjustment;
       grayscale = Math.max(0, Math.min(255, grayscale)); // Clamp values
 
       data[i] = grayscale;
@@ -230,11 +333,11 @@ export function FileUploadExtractor({
       data[i + 2] = grayscale;
     }
 
-    // Step 2: Apply threshold with adjusted level for better text visibility
+    // Step 3: Apply threshold with automatically determined level
     for (let i = 0; i < data.length; i += 4) {
       const grayscale = data[i]; // Already processed above
-      // Use higher threshold for clearer text (120 instead of 96)
-      const value = grayscale >= threshold ? 255 : 0;
+      // Use automatically calculated threshold
+      const value = grayscale >= settings.optimalThreshold ? 255 : 0;
       data[i] = value;
       data[i + 1] = value;
       data[i + 2] = value;
@@ -276,14 +379,11 @@ export function FileUploadExtractor({
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Apply threshold filter with improved text visibility
+        // Apply automatic threshold filter with dynamic brightness/contrast detection
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const thresholdLevel = 150; // Higher threshold for better text visibility (was 96)
-          const filteredImageData = applyThresholdFilter(
-            imageData,
-            thresholdLevel
-          );
+          // Threshold parameter is now ignored as it's calculated automatically
+          const filteredImageData = applyThresholdFilter(imageData, 0);
           ctx.putImageData(filteredImageData, 0, 0);
         }
 
